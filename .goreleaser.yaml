@@ -34,6 +34,6 @@ homebrew_casks:
       name: roman-kiselenko
       email: roman.kiselenko.dev@gmail.com
     repository:
-      owner: roman-kiselenko
+      owner: teleskopio
       name: homebrew-teleskopio
       branch: master

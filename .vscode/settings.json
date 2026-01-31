@@ -1,0 +1,49 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit"
+    },
+    "go.coverOnTestPackage": false,
+    "go.survey.prompt": false,
+    "go.testFlags": [
+        "-v"
+    ],
+    "gopls": {
+        "formatting.gofumpt": false,
+        "analyses": {
+            "copylocks": false,
+            "composites": false,
+            "simplifycompositelit": false
+        }
+    },
+    "go.lintTool": "golangci-lint-v2",
+    "go.lintFlags": [
+        "--path-mode=abs",
+        "--fast-only"
+    ],
+    "go.formatTool": "custom",
+    "go.alternateTools": {
+        "customFormatter": "golangci-lint-v2"
+    },
+    "go.formatFlags": [
+        "fmt",
+        "--stdin"
+    ],
+    "[go]": {
+        "editor.defaultFormatter": "golang.go",
+        "editor.detectIndentation": false,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+    "go.toolsManagement.autoUpdate": true,
+    "go.diagnostic.vulncheck": "Off",
+    "go.lintOnSave": "workspace",
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
+}

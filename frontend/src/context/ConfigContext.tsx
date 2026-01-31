@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getLocalKeyObject, setLocalKeyObject, delLocalKey } from '@/lib/localStorage';
 import type { ServerInfo, ApiResource } from '@/types';
 import { toast } from 'sonner';

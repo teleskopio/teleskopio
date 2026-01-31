@@ -5,7 +5,6 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useTheme } from '@/components/ThemeProvider';
 import type { Theme } from '@/components/ThemeProvider';
 import { getLocalKeyObject } from '@/lib/localStorage';
-import type { ServerInfo } from '@/types';
 import {
   Table,
   TableBody,

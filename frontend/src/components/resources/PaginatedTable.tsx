@@ -33,7 +33,6 @@ interface PaginatedTableProps<T> {
 export function PaginatedTable<T>({
   getPage,
   kind,
-  group,
   subscribeEvents,
   state,
   apiResource,

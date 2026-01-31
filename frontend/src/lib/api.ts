@@ -1,5 +1,4 @@
 import { getLocalKeyObject } from '@/lib/localStorage';
-import type { ServerInfo } from '@/types';
 
 type InvokePayload = Record<string, unknown>;
 

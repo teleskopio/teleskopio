@@ -65,12 +65,13 @@ const CustomResources = () => {
   const observer = useRef<IntersectionObserver | null>(null);
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const { serverInfo } = useConfig();
+  const { serverInfo, isLoading } = useConfig();
 
   const loadPage = async () => {
     if (loading) return;
     setLoading(true);
     try {
+      if (serverInfo?.server === '') return;
       const apiResource = getApiResource({ kind, group, apiResources: serverInfo?.apiResources });
       const [items, next, rv] = await getPage({
         server: serverInfo?.server,
@@ -99,7 +100,7 @@ const CustomResources = () => {
 
   useEffect(() => {
     loadPage();
-  }, [cr.get()]);
+  }, [cr.get(), isLoading]);
 
   useEffect(() => {
     if (!loaderRef.current || !nextToken) return;

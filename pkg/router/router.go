@@ -207,8 +207,8 @@ func (r *Route) ListDynamicResource(c *gin.Context) {
 		Continue: req.Continue,
 	})
 	if err != nil {
-		slog.Error("list", "err", err.Error(), "req", req)
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		slog.Error("list dynamic resources", "err", err.Error(), "req", req)
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
 	}
 

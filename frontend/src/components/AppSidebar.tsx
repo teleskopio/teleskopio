@@ -178,7 +178,7 @@ export function AppSidebar() {
   const crds = useCrdResourcesState();
   const [sidebarItems, setSidebarItems] = useState<any>([]);
   const loading = useloadingState();
-  const { serverInfo } = useConfig();
+  const { serverInfo, isLoading } = useConfig();
 
   useEffect(() => {
     let newSidebar = items;
@@ -217,19 +217,21 @@ export function AppSidebar() {
       if (serverInfo?.server === '') {
         if (x.title === 'Main' || x.title === 'Settings') {
           x.enabled = true;
+        } else if (x.title !== 'Main' || x.title !== 'Settings') {
+          x.enabled = false;
         }
         return x;
       } else if (serverInfo?.server !== '') {
-        if (x.title === 'Main' || x.title === 'Settings') {
+        if (x.title === 'Main') {
           x.enabled = false;
-        } else {
+        } else if (x.title !== 'Main') {
           x.enabled = true;
         }
       }
       return x;
     });
     setSidebarItems(newSidebar);
-  }, [crds, loading]);
+  }, [crds, loading, isLoading]);
   return (
     <Sidebar collapsible="offcanvas">
       <SidebarContent>

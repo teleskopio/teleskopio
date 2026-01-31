@@ -80,8 +80,8 @@ export const DynamicResourceTable = <T extends { metadata: { uid?: string } }>({
 
   const getPage = async ({ limit, continueToken }: { limit: number; continueToken?: string }) => {
     const apiResource = getApiResource({ kind, group });
+    if (!apiResource) return;
     return await call('list_dynamic_resource', {
-      server: serverInfo?.server,
       limit: limit,
       continue: continueToken,
       apiResource,

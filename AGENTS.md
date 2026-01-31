@@ -4,7 +4,7 @@
 
 teleskopio - is a kubernetes web dashboard.
 
-### Stack
+## Stack
 
 - Golang - Kubernetes golang client.
 - React - responsive and modern frontend.
@@ -16,6 +16,7 @@ teleskopio - is a kubernetes web dashboard.
 
 ## Repository overview
 
+- **Entry point**: `main.go` file in the project root.
 - **Source code**: `pkg/` contains the main application code organized by features.
 - **Frontend**: `frontend/` for UI components, pages.
 - **Presentation**: `lib/presentation/` for UI components, pages, and state management.
@@ -35,6 +36,17 @@ teleskopio - is a kubernetes web dashboard.
 
 These targets can be invoked via `make <target>` as needed during development and testing.
 
+## Commit Messages
+
+Follow Conventional Commits:
+
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation only changes
+- `refactor`: A code change that neither fixes a bug nor adds a feature
+- `coauth`: Co-authored changes (e.g., "Co-authored-by: LLM <basename of LLM>")
+- Example: `fix(core): format New function to pass gofumpt (coauth: Qwen3)`
+
 ## Pull request guidelines
 
 - PR titles must start with a category prefix describing the change: `bug:`, `feat:`, `docs:`, or `chore:`.
@@ -52,6 +64,21 @@ make lint-frontend
 ```
 
 All checks must pass before the generated code can be merge
+
+## Bash Guidelines
+
+### IMPORTANT: Avoid commands that cause output buffering issues
+
+- DO NOT pipe output through head, tail, less, or more when monitoring or checking command output
+- DO NOT use `head -n X` or `tail -n X` to truncate output - these cause buffering problems
+- Instead, let commands complete fully, or use flags if the command supports them
+- For log monitoring, prefer reading files directly rather than piping through filters
+
+### When checking command output:
+
+- Run commands directly without pipes when possible
+- If you need to limit output, use command-specific flags (e.g., `git log -n 10` instead of `git log | head -10`)
+- Avoid chained pipes that can cause output to buffer indefinitely
 
 ## Notes
 

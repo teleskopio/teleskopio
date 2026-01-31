@@ -1,14 +1,13 @@
-import { getLocalKey } from '@/lib/localStorage';
+import { getLocalKeyObject } from '@/lib/localStorage';
 import type { ServerInfo } from '@/types';
 
 type InvokePayload = Record<string, unknown>;
 
 export async function call<T = any>(action: string, payload?: InvokePayload): Promise<T | any> {
   let request = { ...payload };
-  const config = getLocalKey('currentCluster');
-  const configInfo = JSON.parse(config) as ServerInfo;
-  if (configInfo.hasOwnProperty('server') && configInfo.server !== '') {
-    request.server = configInfo.server;
+  const config = getLocalKeyObject('currentCluster');
+  if (config.hasOwnProperty('server') && config.server !== '') {
+    request.server = config.server;
   }
   const token = localStorage.getItem('token');
   if (payload) {

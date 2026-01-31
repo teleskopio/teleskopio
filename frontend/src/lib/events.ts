@@ -1,11 +1,9 @@
-import { getLocalKey } from '@/lib/localStorage';
-import type { ServerInfo } from '@/types';
+import { getLocalKeyObject } from '@/lib/localStorage';
 
 export async function stopLogsWatcher(name: string, namespace: string, container: string) {
-  const config = getLocalKey('currentCluster');
-  const configInfo = JSON.parse(config) as ServerInfo;
-  const server = configInfo.server;
-  if (configInfo.hasOwnProperty('server')) {
+  const config = getLocalKeyObject('currentCluster');
+  const server = config.server;
+  if (config.hasOwnProperty('server')) {
     return;
   }
   const token = localStorage.getItem('token');

@@ -7,13 +7,13 @@ export function setLocalBoolean(key: string, value: boolean) {
   localStorage.setItem(key, value.toString());
 }
 
-export function getLocalKey(key: string) {
+export function getLocalKeyObject(key: string) {
   const value = localStorage.getItem(key);
-  return value === null ? '{}' : value;
+  return value === null ? JSON.parse('{}') : JSON.parse(value);
 }
 
-export function setLocalKey(key: string, value: string) {
-  localStorage.setItem(key, value);
+export function setLocalKeyObject(key: string, value: any) {
+  localStorage.setItem(key, JSON.stringify(value));
 }
 
 export function delLocalKey(key: string) {

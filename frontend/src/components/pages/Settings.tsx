@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useTheme } from '@/components/ThemeProvider';
 import type { Theme } from '@/components/ThemeProvider';
-import { getLocalKey } from '@/lib/localStorage';
+import { getLocalKeyObject } from '@/lib/localStorage';
 import type { ServerInfo } from '@/types';
 import {
   Table,
@@ -39,8 +39,7 @@ import {
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const config = getLocalKey('currentCluster');
-  let parsedConfig = JSON.parse(config) as ServerInfo;
+  const config = getLocalKeyObject('currentCluster');
 
   const [managedFields, setManagedFields] = useState<boolean>(() => {
     return getLocalBoolean(MANAGED_FIELDS, false);
@@ -188,7 +187,7 @@ export function SettingsPage() {
             </div>
           </TabsContent>
           <TabsContent value="api-resources">
-            {(parsedConfig.apiResources || []).slice().length === 0 ? (
+            {(config.apiResources || []).slice().length === 0 ? (
               <div className="text-xs p-2">No cluster connected.</div>
             ) : (
               <ScrollArea className="h-[800px] w-full rounded-md border p-1">
@@ -202,7 +201,7 @@ export function SettingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(parsedConfig.apiResources || [])
+                    {(config.apiResources || [])
                       .slice()
                       .sort()
                       .map((a: any, index: number) => (

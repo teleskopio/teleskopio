@@ -1,12 +1,11 @@
-import type { ApiResource, ServerInfo } from '@/types';
-import { getLocalKey } from '@/lib/localStorage';
+import type { ApiResource } from '@/types';
+import { getLocalKeyObject } from '@/lib/localStorage';
 import { call } from '@/lib/api';
 import { toast } from 'sonner';
 
 export async function Load(kind: string, group: string, name: string, namespace: string) {
-  const config = getLocalKey('currentCluster');
-  let parsedConfig = JSON.parse(config) as ServerInfo;
-  const resource = parsedConfig.apiResources?.find(
+  const config = getLocalKeyObject('currentCluster');
+  const resource = config.apiResources?.find(
     (r: ApiResource) => r.kind === kind && r.group === group,
   );
   if (!resource) throw new Error(`API resource for kind ${kind} not found`);

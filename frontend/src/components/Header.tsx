@@ -19,8 +19,7 @@ export function Header({
   setSearchQuery: any;
   withNsSelector?: boolean;
 }) {
-  const { getConfig, deleteConfig } = useConfig();
-  const config = getConfig();
+  const { serverInfo, deleteConfig } = useConfig();
   const crdResources = useCrdResourcesState();
   let navigate = useNavigate();
   let location = useLocation();
@@ -85,21 +84,21 @@ export function Header({
         ) : (
           <></>
         )}
-        {config.server === '' ? (
+        {serverInfo?.server === '' ? (
           <></>
         ) : (
           <p className="text-muted-foreground text-xs pr-2">
             <kbd className="bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[10px] font-medium opacity-100 select-none">
-              {config.server}
+              {serverInfo?.server}
             </kbd>
           </p>
         )}
-        {config.version === '' ? (
+        {serverInfo?.version === '' ? (
           <></>
         ) : (
           <p className="text-muted-foreground text-xs">
             <kbd className="bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[10px] font-medium opacity-100 select-none">
-              {config.version}
+              {serverInfo?.version}
             </kbd>
           </p>
         )}
@@ -110,7 +109,7 @@ export function Header({
             title="disconnect cluster"
             className="bg-red-500 hover:bg-red-400"
             onClick={() => {
-              toast.warning(<div>Disconnect cluster {config.server}</div>);
+              toast.warning(<div>Disconnect cluster {serverInfo?.server}</div>);
               deleteConfig();
               flushAllStates();
               crdResources.set(new Map());

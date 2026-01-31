@@ -31,7 +31,7 @@ const getPage = async ({
   apiResource: ApiResource | undefined;
 }) => {
   return await call('list_dynamic_resource', {
-    server,
+    server: server,
     limit: limit,
     continue: continueToken,
     apiResource: {

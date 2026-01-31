@@ -32,7 +32,8 @@ export const DynamicResourceTable = <T extends { metadata: { uid?: string } }>({
   withSearch = true,
   doubleClickDisabled = false,
 }: DynamicResourceTableProps<T>) => {
-  const subscribeEvents = async (rv: string, apiResource: ApiResource | undefined) => {
+  const subscribeEvents = async (rv: string) => {
+    const apiResource = getApiResource({ kind, group });
     await call('watch_dynamic_resource', {
       apiResource: {
         ...apiResource,
@@ -65,22 +66,25 @@ export const DynamicResourceTable = <T extends { metadata: { uid?: string } }>({
     );
   };
 
-  const getPage = async ({
-    limit,
-    continueToken,
-    apiResource,
+  const getApiResource = ({
+    kind,
+    group,
   }: {
-    limit: number;
-    continueToken?: string;
-    apiResource: ApiResource | undefined;
-  }) => {
+    kind: string;
+    group: string;
+  }): ApiResource | undefined => {
+    return (serverInfo?.apiResources || []).find(
+      (r: ApiResource) => r.kind === kind && r.group === group,
+    );
+  };
+
+  const getPage = async ({ limit, continueToken }: { limit: number; continueToken?: string }) => {
+    const apiResource = getApiResource({ kind, group });
     return await call('list_dynamic_resource', {
       server: serverInfo?.server,
       limit: limit,
       continue: continueToken,
-      apiResource: {
-        ...apiResource,
-      },
+      apiResource,
     });
   };
 
@@ -93,6 +97,7 @@ export const DynamicResourceTable = <T extends { metadata: { uid?: string } }>({
       kind={kind}
       group={group}
       subscribeEvents={subscribeEvents}
+      apiResource={getApiResource({ kind, group })}
       getPage={getPage}
       state={state}
       setState={setState}

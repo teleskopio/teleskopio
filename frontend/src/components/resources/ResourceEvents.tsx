@@ -94,38 +94,33 @@ export function ResourceEvents() {
     };
   }, []);
 
-  const subscribeEvents = async (rv: string) => {
-    const resource = serverInfo?.apiResources.find((r: ApiResource) => {
+  const getAPIResource = () => {
+    return (serverInfo?.apiResources || []).find((r: ApiResource) => {
       if (serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1) {
         return r.kind === 'Event' && r.group === 'events.k8s.io';
       } else {
         return r.kind === 'Event' && r.group === '';
       }
     });
+  };
+
+  const subscribeEvents = async (rv: string) => {
     await call('watch_events_dynamic_resource', {
       uid: uid,
       apiResource: {
-        ...resource,
+        ...getAPIResource(),
         resource_version: rv,
       },
     });
   };
 
   const getPage = async ({ limit, continueToken }: { limit: number; continueToken?: string }) => {
-    const resource = serverInfo?.apiResources.find((r: ApiResource) => {
-      if (serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1) {
-        return r.kind === 'Event' && r.group === 'events.k8s.io';
-      } else {
-        return r.kind === 'Event' && r.group === '';
-      }
-    });
-
     return await call('list_events_dynamic_resource', {
       limit: limit,
       continueToken,
       uid: uid,
       apiResource: {
-        ...resource,
+        ...getAPIResource(),
       },
     });
   };
@@ -168,6 +163,7 @@ export function ResourceEvents() {
         getPage={getPage}
         state={() => events as Map<string, any>}
         setState={setEvents}
+        apiResource={getAPIResource()}
         extractKey={(item) => item.metadata?.uid as string}
         columns={columns}
         namespaced={false}

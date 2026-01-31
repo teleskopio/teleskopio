@@ -1,6 +1,4 @@
 import { JumpCommand } from '@/components/ui/jump-command';
-import { useVersionState, setVersion } from '@/store/version';
-import { useCurrentClusterState, setCurrentCluster } from '@/store/cluster';
 import { Plus, Unplug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -10,9 +8,9 @@ import { NamespaceSelector } from '@/components/NamespaceSelector';
 import { toast } from 'sonner';
 import { removeAllSubscriptions } from '@/lib/subscriptionManager';
 import { flushAllStates } from '@/store/resources';
-import { apiResourcesState } from '@/store/apiResources';
 import { useCrdResourcesState } from '@/store/crdResources';
 import { Input } from '@/components/ui/input';
+import { useConfig } from '@/context/ConfigContext';
 
 export function Header({
   setSearchQuery,
@@ -21,8 +19,7 @@ export function Header({
   setSearchQuery: any;
   withNsSelector?: boolean;
 }) {
-  const version = useVersionState();
-  const clusterState = useCurrentClusterState();
+  const { serverInfo, deleteConfig } = useConfig();
   const crdResources = useCrdResourcesState();
   let navigate = useNavigate();
   let location = useLocation();
@@ -87,21 +84,21 @@ export function Header({
         ) : (
           <></>
         )}
-        {clusterState.server.get() === '' ? (
+        {serverInfo?.server === '' ? (
           <></>
         ) : (
           <p className="text-muted-foreground text-xs pr-2">
             <kbd className="bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[10px] font-medium opacity-100 select-none">
-              {clusterState.server.get()}
+              {serverInfo?.server}
             </kbd>
           </p>
         )}
-        {version.version.get() === '' ? (
+        {serverInfo?.version === '' ? (
           <></>
         ) : (
           <p className="text-muted-foreground text-xs">
             <kbd className="bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[10px] font-medium opacity-100 select-none">
-              {version.version.get()}
+              {serverInfo?.version}
             </kbd>
           </p>
         )}
@@ -112,11 +109,9 @@ export function Header({
             title="disconnect cluster"
             className="bg-red-500 hover:bg-red-400"
             onClick={() => {
-              toast.warning(<div>Disconnect cluster {clusterState.server.get()}</div>);
-              setCurrentCluster('');
-              setVersion('');
+              toast.warning(<div>Disconnect cluster {serverInfo?.server}</div>);
+              deleteConfig();
               flushAllStates();
-              apiResourcesState.set([]);
               crdResources.set(new Map());
               removeAllSubscriptions();
               navigate('/');

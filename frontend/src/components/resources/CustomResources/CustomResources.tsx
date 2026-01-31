@@ -5,7 +5,7 @@ import columns from '@/components/resources/CustomResources/columns';
 import { useEffect, useRef, useState } from 'react';
 import { useLoaderData } from 'react-router';
 import type { ApiResource } from '@/types';
-import { apiResourcesState } from '@/store/apiResources';
+import { useConfig } from '@/context/ConfigContext';
 import { call } from '@/lib/api';
 import moment from 'moment';
 import { Header } from '@/components/Header';
@@ -13,25 +13,28 @@ import { toast } from 'sonner';
 
 const subscribeEvents = async (rv: string, apiResource: ApiResource | undefined) => {
   const request = {
-    ...apiResource,
+    apiResource: { ...apiResource },
     resource_version: rv,
   };
-  await call('watch_dynamic_resource', { request });
+  await call('watch_dynamic_resource', request);
 };
 
 const getPage = async ({
+  server,
   limit,
   continueToken,
   apiResource,
 }: {
+  server: string | undefined;
   limit: number;
   continueToken?: string;
   apiResource: ApiResource | undefined;
 }) => {
   return await call('list_dynamic_resource', {
+    server: server,
     limit: limit,
     continue: continueToken,
-    request: {
+    apiResource: {
       ...apiResource,
       namespaced: false,
     },
@@ -41,13 +44,15 @@ const getPage = async ({
 const getApiResource = ({
   kind,
   group,
+  apiResources,
 }: {
   kind: string;
   group: string;
+  apiResources: ApiResource[] | undefined;
 }): ApiResource | undefined => {
-  const resource = apiResourcesState
-    .get()
-    .find((r: ApiResource) => r.kind === kind && r.group === group);
+  const resource = (apiResources || []).find(
+    (r: ApiResource) => r.kind === kind && r.group === group,
+  );
   if (!resource) throw new Error(`API resource for kind ${kind} and group ${group} not found`);
   return resource;
 };
@@ -60,13 +65,16 @@ const CustomResources = () => {
   const observer = useRef<IntersectionObserver | null>(null);
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const { serverInfo, isLoading } = useConfig();
 
   const loadPage = async () => {
     if (loading) return;
     setLoading(true);
     try {
-      const apiResource = getApiResource({ kind, group });
+      if (serverInfo?.server === '') return;
+      const apiResource = getApiResource({ kind, group, apiResources: serverInfo?.apiResources });
       const [items, next, rv] = await getPage({
+        server: serverInfo?.server,
         apiResource: apiResource,
         limit: 50,
         continueToken: nextToken ?? undefined,
@@ -92,7 +100,7 @@ const CustomResources = () => {
 
   useEffect(() => {
     loadPage();
-  }, [cr.get()]);
+  }, [cr.get(), isLoading]);
 
   useEffect(() => {
     if (!loaderRef.current || !nextToken) return;
@@ -134,7 +142,7 @@ const CustomResources = () => {
         key={`${kind}-${Math.random()}`}
         noResult={data.length === 0}
         columns={columns}
-        apiResource={getApiResource({ kind, group })}
+        apiResource={getApiResource({ kind, group, apiResources: serverInfo?.apiResources })}
         data={data}
       />
       {nextToken && <div ref={loaderRef} style={{ height: 1, marginTop: -1 }} />}

@@ -60,10 +60,10 @@ export function ScaleDialog({ apiResource, kind, rows, open, setOpenDialog }: Sc
           <Button
             onClick={() => {
               call('scale_resource', {
-                request: {
+                name: obj.metadata.name,
+                namespace: obj.metadata.namespace,
+                apiResource: {
                   ...apiResource,
-                  name: obj.metadata.name,
-                  namespace: obj.metadata.namespace,
                 },
                 replicas: parseInt(scaleValue),
               })

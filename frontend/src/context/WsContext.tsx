@@ -16,8 +16,8 @@ export const WSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const ws = new ReconnectingWebSocket('ws://localhost:3080/ws');
     wsRef.current = ws;
 
-    ws.addEventListener('open', () => console.log('WS connected'));
-    ws.addEventListener('close', () => console.log('WS disconnected'));
+    ws.addEventListener('open', () => console.debug('WS connected'));
+    ws.addEventListener('close', () => console.debug('WS disconnected'));
 
     ws.addEventListener('message', (event) => {
       try {

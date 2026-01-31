@@ -2,7 +2,9 @@ package router
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,175 +14,34 @@ import (
 	"strings"
 	"time"
 
+	icache "teleskopio/pkg/cache"
 	"teleskopio/pkg/config"
 	"teleskopio/pkg/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/release"
 
 	"golang.org/x/crypto/bcrypt"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sYAML "k8s.io/apimachinery/pkg/util/yaml"
 	w "k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/drain"
 
 	webSocket "teleskopio/pkg/socket"
 )
-
-type Cluster struct {
-	Server string `json:"server"`
-}
-
-type Payload struct {
-	Server string `json:"server"`
-}
-
-// TODO move types and refactor
-type APIResourceInfo struct {
-	Group      string `json:"group"`
-	Version    string `json:"version"`
-	Kind       string `json:"kind"`
-	Namespaced bool   `json:"namespaced"`
-}
-
-type ListRequest struct {
-	UID      string `json:"uid"`
-	Continue string `json:"continue"`
-	Limit    int64  `json:"limit"`
-	Server   string `json:"server"`
-	Resource string `json:"resource"`
-	Request  struct {
-		Namespace  string `json:"namespace"`
-		Group      string `json:"group"`
-		Version    string `json:"version"`
-		Kind       string `json:"kind"`
-		Namespaced bool   `json:"namespaced"`
-	} `json:"request"`
-}
-
-type WatchRequest struct {
-	UID      string `json:"uid"`
-	Server   string `json:"server"`
-	Resource string `json:"resource"`
-	Request  struct {
-		Namespace       string `json:"namespace"`
-		Group           string `json:"group"`
-		Version         string `json:"version"`
-		Kind            string `json:"kind"`
-		Namespaced      bool   `json:"namespaced"`
-		ResourceVersion string `json:"resource_version"`
-	} `json:"request"`
-}
-
-type GetRequest struct {
-	Server   string `json:"server"`
-	Resource string `json:"resource"`
-	Request  struct {
-		Name       string `json:"name"`
-		Namespace  string `json:"namespace"`
-		Group      string `json:"group"`
-		Version    string `json:"version"`
-		Kind       string `json:"kind"`
-		Namespaced bool   `json:"namespaced"`
-	} `json:"request"`
-}
-
-type PodLogRequest struct {
-	Server    string `json:"server"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Container string `json:"container"`
-	TailLines *int64 `json:"tail_lines"`
-}
-
-type DeleteRequest struct {
-	Server    string `json:"server"`
-	Resource  string `json:"resource"`
-	Resources []struct {
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
-	} `json:"resources"`
-	Request struct {
-		Name            string `json:"name"`
-		Group           string `json:"group"`
-		Version         string `json:"version"`
-		Kind            string `json:"kind"`
-		Namespaced      bool   `json:"namespaced"`
-		ResourceVersion string `json:"resource_version"`
-	} `json:"request"`
-}
-
-type CreateRequest struct {
-	Server    string `json:"server"`
-	Namespace string `json:"namespace"`
-	Yaml      string `json:"yaml"`
-}
-
-type NodeOperation struct {
-	Name         string `json:"name"`
-	Group        string `json:"group"`
-	Version      string `json:"version"`
-	Kind         string `json:"kind"`
-	Namespaced   bool   `json:"namespaced"`
-	ResourceName string `json:"resourceName"`
-	Server       string `json:"server"`
-	Resource     string `json:"resource"`
-	Cordon       bool   `json:"cordon"`
-}
-
-type NodeDrain struct {
-	ResourceName        string `json:"resourceName"`
-	ResourceUID         string `json:"resourceUid"`
-	Server              string `json:"server"`
-	DrainForce          bool   `json:"drainForce"`
-	IgnoreAllDaemonSets bool   `json:"IgnoreAllDaemonSets"`
-	DeleteEmptyDirData  bool   `json:"DeleteEmptyDirData"`
-	DrainTimeout        int64  `json:"drainTimeout"`
-}
-
-type TriggerCronjob struct {
-	Group        string `json:"group"`
-	Version      string `json:"version"`
-	Kind         string `json:"kind"`
-	Namespaced   bool   `json:"namespaced"`
-	Namespace    string `json:"namespace"`
-	ResourceName string `json:"resourceName"`
-	Server       string `json:"server"`
-	Resource     string
-}
-
-type ResourceOperation struct {
-	Request struct {
-		Name            string `json:"name"`
-		Namespace       string `json:"namespace"`
-		Group           string `json:"group"`
-		Version         string `json:"version"`
-		Kind            string `json:"kind"`
-		Namespaced      bool   `json:"namespaced"`
-		ResourceVersion string `json:"resource_version"`
-	} `json:"request"`
-	Server   string `json:"server"`
-	Resource string `json:"resource"`
-	Replicas int64  `json:"replicas"`
-}
-
-type Route struct {
-	cfg      *config.Config
-	clusters []*config.Cluster
-	users    *config.Users
-	hub      *webSocket.Hub
-	// TODO
-	// Add mutex
-	watchers        map[string]w.Interface
-	podLogsWatchers map[string]chan (bool)
-}
 
 func New(hub *webSocket.Hub, _ *gin.Engine, cfg *config.Config, clusters []*config.Cluster, users *config.Users) (Route, error) {
 	r := Route{
@@ -189,6 +50,7 @@ func New(hub *webSocket.Hub, _ *gin.Engine, cfg *config.Config, clusters []*conf
 		users:           users,
 		hub:             hub,
 		watchers:        make(map[string]w.Interface),
+		helmWathers:     make(map[string]informers.SharedInformerFactory),
 		podLogsWatchers: make(map[string]chan bool),
 	}
 	return r, nil
@@ -218,6 +80,11 @@ func (r *Route) GetVersion(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
+	if err := req.Validate(); err != nil {
+		slog.Error("validate", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
 	ver, err := r.GetCluster(req.Server).Typed.Discovery().ServerVersion()
 	if err != nil {
 		slog.Error("client", "err", err.Error(), "req", req)
@@ -234,7 +101,11 @@ func (r *Route) ListCustomResourceDefinitions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-
+	if err := req.Validate(); err != nil {
+		slog.Error("validate", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
 	crdList, err := r.GetCluster(req.Server).APIExtension.ApiextensionsV1().CustomResourceDefinitions().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		slog.Error("api extension", "err", err.Error(), "req", req)
@@ -252,6 +123,11 @@ func (r *Route) ListResources(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
+	if err := req.Validate(); err != nil {
+		slog.Error("validate", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
 	discoveryClient := r.GetCluster(req.Server).Typed.Discovery()
 
 	apiGroupResources, err := discoveryClient.ServerPreferredResources()
@@ -261,7 +137,7 @@ func (r *Route) ListResources(c *gin.Context) {
 		return
 	}
 
-	result := []APIResourceInfo{}
+	result := []APIResource{}
 	for _, list := range apiGroupResources {
 		gv, err := schema.ParseGroupVersion(list.GroupVersion)
 		if err != nil {
@@ -270,12 +146,18 @@ func (r *Route) ListResources(c *gin.Context) {
 			return
 		}
 		for _, res := range list.APIResources {
-			result = append(result, APIResourceInfo{
+			apiResource := APIResource{
 				Group:      gv.Group,
 				Version:    gv.Version,
 				Kind:       res.Kind,
+				Resource:   res.Name,
 				Namespaced: res.Namespaced,
-			})
+			}
+			apiResource.APIVersion = fmt.Sprintf("%s/%s", gv.Group, gv.Version)
+			if gv.Group == "" {
+				apiResource.APIVersion = gv.Version
+			}
+			result = append(result, apiResource)
 		}
 	}
 	c.JSON(http.StatusOK, result)
@@ -288,9 +170,14 @@ func (r *Route) ListDynamicResource(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
+	if err := req.Validate(); err != nil {
+		slog.Error("validate", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Request.Group,
-		Version: req.Request.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -299,18 +186,18 @@ func (r *Route) ListDynamicResource(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Request.Kind && r.SingularName == strings.ToLower(req.Request.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Request.Group,
-		Version:  req.Request.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
 	var ri dynamic.ResourceInterface
-	if req.Request.Namespace != "" {
-		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Request.Namespace)
+	if req.Namespace != "" {
+		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
 	} else {
 		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr)
 	}
@@ -320,17 +207,17 @@ func (r *Route) ListDynamicResource(c *gin.Context) {
 		Continue: req.Continue,
 	})
 	if err != nil {
-		slog.Error("list", "err", err.Error(), "req", req)
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		slog.Error("list dynamic resources", "err", err.Error(), "req", req)
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
 	}
 
 	for i := range list.Items {
-		list.Items[i].SetAPIVersion(req.Request.Version)
-		if req.Request.Group != "" {
-			list.Items[i].SetAPIVersion(fmt.Sprintf("%s/%s", req.Request.Group, req.Request.Version))
+		list.Items[i].SetAPIVersion(req.APIResource.Version)
+		if req.APIResource.Group != "" {
+			list.Items[i].SetAPIVersion(fmt.Sprintf("%s/%s", req.APIResource.Group, req.APIResource.Version))
 		}
-		list.Items[i].SetKind(req.Request.Kind)
+		list.Items[i].SetKind(req.APIResource.Kind)
 	}
 	continueToken, resourceVersion := "", ""
 	metadata := list.Object["metadata"].(map[string]interface{})
@@ -351,8 +238,8 @@ func (r *Route) ListEventsDynamicResource(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Request.Group,
-		Version: req.Request.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -361,23 +248,23 @@ func (r *Route) ListEventsDynamicResource(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Request.Kind && r.SingularName == strings.ToLower(req.Request.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Request.Group,
-		Version:  req.Request.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
 	var ri dynamic.ResourceInterface
-	if req.Request.Namespace != "" {
-		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Request.Namespace)
+	if req.Namespace != "" {
+		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
 	} else {
 		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr)
 	}
 	fieldSelector := ""
-	if req.Request.Group == "" {
+	if req.APIResource.Group == "" {
 		fieldSelector = fmt.Sprintf("involvedObject.uid=%s", req.UID)
 	} else {
 		fieldSelector = fmt.Sprintf("regarding.uid=%s", req.UID)
@@ -397,10 +284,10 @@ func (r *Route) ListEventsDynamicResource(c *gin.Context) {
 
 	for i := range list.Items {
 		list.Items[i].SetAPIVersion("%s")
-		if req.Request.Group != "" {
-			list.Items[i].SetAPIVersion(fmt.Sprintf("%s/%s", req.Request.Group, req.Request.Version))
+		if req.APIResource.Group != "" {
+			list.Items[i].SetAPIVersion(fmt.Sprintf("%s/%s", req.APIResource.Group, req.APIResource.Version))
 		}
-		list.Items[i].SetKind(req.Request.Kind)
+		list.Items[i].SetKind(req.APIResource.Kind)
 	}
 	continueToken, resourceVersion := "", ""
 	metadata := list.Object["metadata"].(map[string]interface{})
@@ -421,8 +308,8 @@ func (r *Route) WatchEventsDynamicResource(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Request.Group,
-		Version: req.Request.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -431,18 +318,18 @@ func (r *Route) WatchEventsDynamicResource(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Request.Kind && r.SingularName == strings.ToLower(req.Request.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Request.Group,
-		Version:  req.Request.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
 	var ri dynamic.ResourceInterface
-	if req.Request.Namespace != "" {
-		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Request.Namespace)
+	if req.Namespace != "" {
+		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
 	} else {
 		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr)
 	}
@@ -453,9 +340,9 @@ func (r *Route) WatchEventsDynamicResource(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": ""})
 		return
 	}
-	watchOptions := metav1.ListOptions{ResourceVersion: req.Request.ResourceVersion}
+	watchOptions := metav1.ListOptions{ResourceVersion: req.APIResource.ResourceVersion}
 	fieldSelector := ""
-	if req.Request.Group == "" {
+	if req.APIResource.Group == "" {
 		fieldSelector = fmt.Sprintf("involvedObject.uid=%s", req.UID)
 	} else {
 		fieldSelector = fmt.Sprintf("regarding.uid=%s", req.UID)
@@ -498,8 +385,8 @@ func (r *Route) WatchDynamicResource(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Request.Group,
-		Version: req.Request.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -508,23 +395,23 @@ func (r *Route) WatchDynamicResource(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Request.Kind && r.SingularName == strings.ToLower(req.Request.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Request.Group,
-		Version:  req.Request.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
 	var ri dynamic.ResourceInterface
-	if req.Request.Namespace != "" {
-		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Request.Namespace)
+	if req.Namespace != "" {
+		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
 	} else {
 		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr)
 	}
-	watcherKey := fmt.Sprintf("%s-%s", req.Request.Kind, req.Server)
-	watch, err := ri.Watch(context.TODO(), metav1.ListOptions{ResourceVersion: req.Request.ResourceVersion})
+	watcherKey := fmt.Sprintf("%s-%s", req.APIResource.Kind, req.Server)
+	watch, err := ri.Watch(context.TODO(), metav1.ListOptions{ResourceVersion: req.APIResource.ResourceVersion})
 	if err != nil {
 		slog.Error("watcher", "err", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -539,14 +426,14 @@ func (r *Route) WatchDynamicResource(c *gin.Context) {
 			case w.Added, w.Modified:
 				slog.Debug("message received", "gvr", gvr.String(), "watchKey", watcherKey, "type", event.Type)
 				payload, _ := json.Marshal(map[string]interface{}{
-					"event":   fmt.Sprintf("%s-%s-updated", req.Request.Kind, req.Server),
+					"event":   fmt.Sprintf("%s-%s-updated", req.APIResource.Kind, req.Server),
 					"payload": event.Object,
 				})
 				r.hub.Broadcast(payload)
 			case w.Deleted:
 				slog.Debug("message received", "gvr", gvr.String(), "watchKey", watcherKey, "type", event.Type)
 				payload, _ := json.Marshal(map[string]interface{}{
-					"event":   fmt.Sprintf("%s-%s-deleted", req.Request.Kind, req.Server),
+					"event":   fmt.Sprintf("%s-%s-deleted", req.APIResource.Kind, req.Server),
 					"payload": event.Object,
 				})
 				r.hub.Broadcast(payload)
@@ -568,8 +455,8 @@ func (r *Route) GetDynamicResource(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Request.Group,
-		Version: req.Request.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -578,23 +465,23 @@ func (r *Route) GetDynamicResource(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Request.Kind && r.SingularName == strings.ToLower(req.Request.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Request.Group,
-		Version:  req.Request.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
 	var ri dynamic.ResourceInterface
-	if req.Request.Namespace != "" {
-		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Request.Namespace)
+	if req.Namespace != "" {
+		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
 	} else {
 		ri = r.GetCluster(req.Server).Dynamic.Resource(gvr)
 	}
 
-	res, err := ri.Get(context.TODO(), req.Request.Name, metav1.GetOptions{})
+	res, err := ri.Get(context.TODO(), req.Name, metav1.GetOptions{})
 	if err != nil {
 		slog.Error("get", "err", err.Error(), "req", req)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -745,8 +632,8 @@ func (r *Route) DeleteDynamicResources(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Request.Group,
-		Version: req.Request.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -755,16 +642,16 @@ func (r *Route) DeleteDynamicResources(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Request.Kind && r.SingularName == strings.ToLower(req.Request.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Request.Group,
-		Version:  req.Request.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
-	if req.Request.Namespaced {
+	if req.APIResource.Namespaced {
 		for _, res := range req.Resources {
 			if err := r.GetCluster(req.Server).Dynamic.Resource(gvr).Namespace(res.Namespace).Delete(context.TODO(), res.Name, metav1.DeleteOptions{}); err != nil {
 				slog.Error("delete", "err", err.Error(), "ns", true, "res", res)
@@ -792,8 +679,8 @@ func (r *Route) NodeOperation(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Group,
-		Version: req.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -802,14 +689,14 @@ func (r *Route) NodeOperation(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Kind && r.SingularName == strings.ToLower(req.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Group,
-		Version:  req.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
 	ri := r.GetCluster(req.Server).Dynamic.Resource(gvr)
 
@@ -901,6 +788,7 @@ func (r *Route) StreamPodLogs(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
+	// TODO might be a collision with another server
 	podLogsKey := fmt.Sprintf("pod_log_line_%s_%s", req.Name, req.Namespace)
 	if _, ok := r.podLogsWatchers[podLogsKey]; ok {
 		slog.Info("pod logs exist", "key", podLogsKey)
@@ -1017,8 +905,8 @@ func (r *Route) ScaleResource(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Request.Group,
-		Version: req.Request.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -1027,18 +915,18 @@ func (r *Route) ScaleResource(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Request.Kind && r.SingularName == strings.ToLower(req.Request.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
 	gvr := schema.GroupVersionResource{
-		Group:    req.Request.Group,
-		Version:  req.Request.Version,
-		Resource: req.Resource,
+		Group:    req.APIResource.Group,
+		Version:  req.APIResource.Version,
+		Resource: req.APIResource.Resource,
 	}
 	resource, err := r.GetCluster(req.Server).Dynamic.Resource(gvr).
-		Namespace(req.Request.Namespace).
-		Get(context.Background(), req.Request.Name, metav1.GetOptions{})
+		Namespace(req.Namespace).
+		Get(context.Background(), req.Name, metav1.GetOptions{})
 	if err != nil {
 		slog.Error("get", "err", err.Error(), "req", req)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -1051,7 +939,7 @@ func (r *Route) ScaleResource(c *gin.Context) {
 		return
 	}
 	if _, err := r.GetCluster(req.Server).Dynamic.Resource(gvr).
-		Namespace(req.Request.Namespace).
+		Namespace(req.Namespace).
 		Update(context.Background(), unstr, metav1.UpdateOptions{}); err != nil {
 		slog.Error("update", "err", err.Error(), "req", req)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -1069,8 +957,8 @@ func (r *Route) TriggerCronjob(c *gin.Context) {
 		return
 	}
 	apiResourceList, err := r.GetCluster(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.Group,
-		Version: req.Version,
+		Group:   req.APIResource.Group,
+		Version: req.APIResource.Version,
 	}.String())
 	if err != nil {
 		slog.Error("api list", "err", err.Error(), "req", req)
@@ -1079,11 +967,11 @@ func (r *Route) TriggerCronjob(c *gin.Context) {
 	}
 
 	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.Kind && r.SingularName == strings.ToLower(req.Kind) {
-			req.Resource = r.Name
+		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
+			req.APIResource.Resource = r.Name
 		}
 	}
-	cronJob, err := r.GetCluster(req.Server).Typed.BatchV1().CronJobs(req.Namespace).Get(context.TODO(), req.ResourceName, metav1.GetOptions{})
+	cronJob, err := r.GetCluster(req.Server).Typed.BatchV1().CronJobs(req.Namespace).Get(context.TODO(), req.Name, metav1.GetOptions{})
 	if err != nil {
 		slog.Error("get cronjob", "err", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -1091,7 +979,7 @@ func (r *Route) TriggerCronjob(c *gin.Context) {
 	}
 
 	jobSpec := cronJob.Spec.JobTemplate.Spec
-	jobName := fmt.Sprintf("%s-manual-%d", req.ResourceName, metav1.Now().Unix())
+	jobName := fmt.Sprintf("%s-manual-%d", req.Name, metav1.Now().Unix())
 
 	_, err = r.GetCluster(req.Server).Typed.BatchV1().Jobs(req.Namespace).Create(context.TODO(), &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1109,15 +997,15 @@ func (r *Route) TriggerCronjob(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": jobName})
 }
 
-type creds struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
 func (r *Route) Login(c *gin.Context) {
 	var req creds
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Error("parsing", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	if err := req.Validate(); err != nil {
+		slog.Error("validate", "err", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
@@ -1143,4 +1031,140 @@ func (r *Route) Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"token": t})
+}
+
+func (r *Route) ListHelmReleases(c *gin.Context) {
+	var req HelmChart
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("parsing", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	flags := genericclioptions.NewConfigFlags(false)
+	// Spoof kube config on the fly
+	flags.WrapConfigFn = func(_ *rest.Config) *rest.Config {
+		return r.GetCluster(req.Server).RestConfig
+	}
+	var result []*release.Release
+	slog.Debug("get releases", "ns", len(req.Namespaces))
+	for _, ns := range req.Namespaces {
+		actionConfig := new(action.Configuration)
+		if err := actionConfig.Init(flags, ns, "secret", slog.Default().Info); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+
+		list := action.NewList(actionConfig)
+		list.All = true
+
+		rels, err := list.Run()
+		if err != nil {
+			slog.Error("cant get releases", "ns", ns, "err", err.Error())
+			continue
+		}
+
+		result = append(result, rels...)
+	}
+
+	// TODO stop all watchers
+	if _, ok := r.helmWathers[req.Server]; !ok {
+		r.helmWathers[req.Server] = icache.NewCacheInformers(c.Request.Context(), make(chan struct{}), r.GetCluster(req.Server).Typed, cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				sec := obj.(*v1.Secret)
+				slog.Debug("add", "sec", sec.Labels)
+				rel, err := decodeHelmRelease(sec.Data["release"])
+				if err != nil {
+					slog.Error("cant add releases", "ns", sec.Namespace, "err", err.Error())
+					return
+				}
+				payload, _ := json.Marshal(map[string]interface{}{
+					"event":   fmt.Sprintf("helm-release-%s-added", req.Server),
+					"payload": rel,
+				})
+				r.hub.Broadcast(payload)
+			},
+			UpdateFunc: func(_, newObj interface{}) {
+				sec := newObj.(*v1.Secret)
+				slog.Debug("update", "sec", sec.Labels)
+				rel, err := decodeHelmRelease(sec.Data["release"])
+				if err != nil {
+					slog.Error("cant update releases", "ns", sec.Namespace, "err", err.Error())
+					return
+				}
+				payload, _ := json.Marshal(map[string]interface{}{
+					"event":   fmt.Sprintf("helm-release-%s-updated", req.Server),
+					"payload": rel,
+				})
+				r.hub.Broadcast(payload)
+			},
+			DeleteFunc: func(obj interface{}) {
+				sec := obj.(*v1.Secret)
+				slog.Debug("delete", "sec", sec.Labels)
+				rel, err := decodeHelmRelease(sec.Data["release"])
+				if err != nil {
+					slog.Error("cant delete releases", "ns", sec.Namespace, "err", err.Error())
+					return
+				}
+				payload, _ := json.Marshal(map[string]interface{}{
+					"event":   fmt.Sprintf("helm-release-%s-deleted", req.Server),
+					"payload": rel,
+				})
+				r.hub.Broadcast(payload)
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"charts": result})
+}
+
+func (r *Route) GetHelmRelease(c *gin.Context) {
+	var req HelmRelease
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("parsing", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	flags := genericclioptions.NewConfigFlags(false)
+	// Spoof kube config on the fly
+	flags.WrapConfigFn = func(_ *rest.Config) *rest.Config {
+		return r.GetCluster(req.Server).RestConfig
+	}
+	actionConfig := new(action.Configuration)
+	if err := actionConfig.Init(flags, req.Namespace, "secret", slog.Default().Info); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	list := action.NewGet(actionConfig)
+
+	rel, err := list.Run(req.Name)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": rel})
+}
+
+func decodeHelmRelease(data []byte) (release.Release, error) {
+	var release release.Release
+	decodedBytes, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		return release, fmt.Errorf("decoding string: %w", err)
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(decodedBytes))
+	if err != nil {
+		return release, fmt.Errorf("creating gzip reader: %w", err)
+	}
+	defer gz.Close()
+
+	decoded, err := io.ReadAll(gz)
+	if err != nil {
+		return release, fmt.Errorf("decompressing data: %w", err)
+	}
+
+	if err := json.Unmarshal(decoded, &release); err != nil {
+		return release, fmt.Errorf("unmarshalling JSON: %w", err)
+	}
+	return release, nil
 }

@@ -6,22 +6,22 @@ import moment from 'moment';
 import { Header } from '@/components/Header';
 import { useSelectedNamespacesState } from '@/store/selectedNamespace';
 import type { ApiResource } from '@/types';
-import { apiResourcesState } from '@/store/apiResources';
-import { getVersion } from '@/store/version';
 import { compareVersions } from 'compare-versions';
+import { useConfig } from '@/context/ConfigContext';
 
 interface PaginatedTableProps<T> {
   kind: string;
   group: string;
   getPage: (args: {
-    apiResource: ApiResource | undefined;
+    server: string | undefined;
     limit: number;
     continueToken?: string;
   }) => Promise<[T[], string | null, string]>;
-  subscribeEvents: (rv: string, apiResource: ApiResource | undefined) => Promise<void>;
+  subscribeEvents: (rv: string) => Promise<void>;
   state: () => Map<string, T>;
   setState: (updater: (prev: Map<string, T>) => Map<string, T>) => void;
   extractKey: (item: T) => string;
+  apiResource: ApiResource | undefined;
   columns: any;
   namespaced?: boolean;
   withNsSelector?: boolean;
@@ -33,9 +33,9 @@ interface PaginatedTableProps<T> {
 export function PaginatedTable<T>({
   getPage,
   kind,
-  group,
   subscribeEvents,
   state,
+  apiResource,
   setState,
   extractKey,
   columns,
@@ -49,24 +49,15 @@ export function PaginatedTable<T>({
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const selectedNamespace = useSelectedNamespacesState();
   const [searchQuery, setSearchQuery] = useState('');
-
-  const getApiResource = ({
-    kind,
-    group,
-  }: {
-    kind: string;
-    group: string;
-  }): ApiResource | undefined => {
-    return apiResourcesState.get().find((r: ApiResource) => r.kind === kind && r.group === group);
-  };
+  const { serverInfo, isLoading } = useConfig();
 
   const loadPage = async () => {
     if (loading) return;
     setLoading(true);
     try {
-      const apiResource = getApiResource({ kind, group });
+      if (serverInfo?.server === '') return;
       const [items, next, rv] = await getPage({
-        apiResource: apiResource,
+        server: serverInfo?.server,
         limit: 50,
         continueToken: nextToken ?? undefined,
       });
@@ -77,12 +68,12 @@ export function PaginatedTable<T>({
         });
         return newMap;
       });
-      await subscribeEvents(rv, apiResource);
+      await subscribeEvents(rv);
       setNextToken(next);
     } catch (e: any) {
       console.error('Error loading page:', e);
       if (e.message) {
-        toast.error(`Error loading data for table: ${e.message}`);
+        toast.error(`${e.message}`);
       }
     } finally {
       setLoading(false);
@@ -91,7 +82,7 @@ export function PaginatedTable<T>({
 
   useEffect(() => {
     loadPage();
-  }, []);
+  }, [isLoading]);
 
   useEffect(() => {
     if (!loaderRef.current || !nextToken) return;
@@ -117,7 +108,7 @@ export function PaginatedTable<T>({
     .filter((x: any) => {
       let attribute: string;
       if (kind === 'Event') {
-        if (compareVersions(getVersion(), '1.20') === 1) {
+        if (serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1) {
           attribute = x.note;
         } else {
           attribute = x.message;
@@ -130,11 +121,7 @@ export function PaginatedTable<T>({
         .includes(searchQuery.toLowerCase());
     })
     .filter(
-      (x: any) =>
-        !getApiResource({ kind, group })?.namespaced ||
-        !ns ||
-        ns === 'all' ||
-        x.metadata.namespace === ns,
+      (x: any) => !apiResource?.namespaced || !ns || ns === 'all' || x.metadata.namespace === ns,
     );
   const showInitialLoader = loading && data.length === 0;
   return (
@@ -148,7 +135,7 @@ export function PaginatedTable<T>({
       <div className="flex-1 overflow-y-auto">
         <DataTable
           kind={kind}
-          apiResource={getApiResource({ kind, group })}
+          apiResource={apiResource}
           doubleClickDisabled={doubleClickDisabled}
           noResult={data.length === 0}
           columns={columns}

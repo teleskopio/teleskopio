@@ -35,6 +35,11 @@ declare module '@tanstack/react-table' {
   }
 }
 
+interface HelmRelease {
+  name: string;
+  namespace: string;
+}
+
 interface ColumnData {
   kind: string;
   apiVersion: string;
@@ -184,6 +189,13 @@ export function DataTable<TData, TValue>({
 
 function openResource(doubleClickDisabled: boolean, cell: any, navigate: any) {
   if (doubleClickDisabled) return;
+  if (cell.row.original?.hasOwnProperty('chart')) {
+    navigate(
+      `/helm/${(cell.row.original as HelmRelease)?.name}/${(cell.row.original as HelmRelease)?.namespace}`,
+    );
+    return;
+  }
+
   const group_version = extractGroupVersion((cell.row.original as ColumnData)?.apiVersion);
   let group = group_version[0];
   if (group_version.length === 1) {

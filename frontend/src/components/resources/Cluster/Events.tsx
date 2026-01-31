@@ -1,14 +1,15 @@
 import { DynamicResourceTable } from '@/components/resources/DynamicResourceTable';
 import { useEventsState } from '@/store/resources';
 import columns from '@/components/resources/Cluster/columns/Events';
-import { getVersion } from '@/store/version';
+import { useConfig } from '@/context/ConfigContext';
 import { compareVersions } from 'compare-versions';
 
 const Events = () => {
   const ev = useEventsState();
+  const { serverInfo } = useConfig();
   let kind: string;
   let group: string;
-  if (compareVersions(getVersion(), '1.20') === 1) {
+  if (serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1) {
     kind = 'Event';
     group = 'events.k8s.io';
   } else {

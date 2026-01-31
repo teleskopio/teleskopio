@@ -21,7 +21,7 @@ import {
   JSONSCHEMA_KEY,
 } from '@/settings';
 import { useLoaderData } from 'react-router';
-import { useVersionState } from '@/store/version';
+import { useConfig } from '@/context/ConfigContext';
 
 window.MonacoEnvironment = {
   getWorker(moduleId, label) {
@@ -39,7 +39,7 @@ loader.config({ monaco });
 
 export default function ResourceEditor() {
   const { theme } = useTheme();
-  const version = useVersionState();
+  const { serverInfo } = useConfig();
   let navigate = useNavigate();
   const { name, namespace, data } = useLoaderData();
   const [jsonSchema] = useState<boolean>(() => {
@@ -77,7 +77,7 @@ export default function ResourceEditor() {
     let monacoParams: MonacoYamlOptions = { enableSchemaRequest: false };
     let obj = yaml.load(data);
     if (jsonSchema) {
-      const k8sv = version.version.get().split('+')[0];
+      const k8sv = serverInfo?.version.split('+')[0]; // some distribution use strange version like 1.34+k3s
       const file = `file:///yaml/${obj.kind}/**`;
       monacoParams = {
         enableSchemaRequest: true,

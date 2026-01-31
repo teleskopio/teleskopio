@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"teleskopio/pkg/config"
@@ -25,6 +26,8 @@ type App struct {
 	Users    *config.Users
 	signchnl chan (os.Signal)
 	exitSig  chan (os.Signal)
+	isReady  bool
+	mu       sync.Mutex
 }
 
 func New(version string, configPath string, exitchnl, signchnl chan (os.Signal)) (*App, error) {
@@ -48,9 +51,12 @@ func New(version string, configPath string, exitchnl, signchnl chan (os.Signal))
 
 func (a *App) Run(staticFiles embed.FS) error {
 	slog.Info("version", "version", a.Config.Version)
+	a.mu.Lock()
 	if err := a.initServer(staticFiles); err != nil {
 		slog.Error("cant init server", "error", err)
 	}
+	a.isReady = true
+	a.mu.Unlock()
 	go func() {
 		code := <-a.signchnl
 		slog.Info("os signal received", "signal", code)
@@ -112,6 +118,22 @@ func (a *App) initServer(staticFiles embed.FS) error {
 			"message": "pong",
 		})
 	})
+
+	// Liveness probe for Kubernetes
+	router.GET("/healthz", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	router.GET("/readyz", func(c *gin.Context) {
+		if a.isReady {
+			c.JSON(http.StatusOK, gin.H{
+				"message": "ready",
+			})
+			return
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"message": "not ready",
+		})
+	})
 	router.GET("/api/auth_disabled", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": a.Config.AuthDisabled,
@@ -140,6 +162,8 @@ func (a *App) initServer(staticFiles embed.FS) error {
 	auth.POST("/drain_node", mdlwr.CheckRole(), r.NodeDrain)
 	auth.POST("/scale_resource", mdlwr.CheckRole(), r.ScaleResource)
 	auth.POST("/trigger_cronjob", mdlwr.CheckRole(), r.TriggerCronjob)
+	auth.POST("/helm_releases", mdlwr.CheckRole(), r.ListHelmReleases)
+	auth.POST("/helm_release", mdlwr.CheckRole(), r.GetHelmRelease)
 	webSocket.SetupWebsocket(hub, router)
 
 	go func() {

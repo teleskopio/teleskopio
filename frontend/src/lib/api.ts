@@ -1,16 +1,17 @@
-import { currentClusterState } from '@/store/cluster';
+import { getLocalKeyObject } from '@/lib/localStorage';
 
 type InvokePayload = Record<string, unknown>;
 
 export async function call<T = any>(action: string, payload?: InvokePayload): Promise<T | any> {
   let request = { ...payload };
-  if (currentClusterState.server.get() !== '') {
-    request.server = currentClusterState.server.get();
+  const config = getLocalKeyObject('currentCluster');
+  if (config.hasOwnProperty('server') && config.server !== '') {
+    request.server = config.server;
   }
   const token = localStorage.getItem('token');
   if (payload) {
     if (action !== 'lookup_configs' && action !== 'ping') {
-      console.log(`[${action}] hit payload [${JSON.stringify(request)}]`);
+      console.debug(`[${action}] hit payload [${JSON.stringify(request)}]`);
     }
     const res = await fetch(`/api/${action}`, {
       method: 'POST',
@@ -31,7 +32,7 @@ export async function call<T = any>(action: string, payload?: InvokePayload): Pr
     return res.text();
   }
   if (action !== 'lookup_configs' && action !== 'ping') {
-    console.log(`[${action}] hit`);
+    console.debug(`[${action}] hit`);
   }
   const res = await fetch(`/api/${action}`, {
     headers: {

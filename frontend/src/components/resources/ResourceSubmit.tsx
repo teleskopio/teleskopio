@@ -102,7 +102,10 @@ export default function ResourceEditor() {
     if (stripManagedFields && obj?.metadata?.managedFields) {
       delete obj.metadata.managedFields;
     }
-    if (selectedNamespace.get() !== 'all') {
+    if (
+      (selectedNamespace.get() !== 'all' && obj.metadata.namespace === '') ||
+      obj.metadata.namespace === undefined
+    ) {
       obj.metadata.namespace = selectedNamespace.get();
       toast.warning(<span>Using current namespace {selectedNamespace.get()}</span>);
     }

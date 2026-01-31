@@ -3,19 +3,16 @@ import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 import { call } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
-import { useVersionState } from '@/store/version';
 import { useLoaderData } from 'react-router';
 import { ColumnDef } from '@tanstack/react-table';
 import HeaderAction from '@/components/ui/Table/HeaderAction';
 import { memo } from 'react';
 import AgeCell from '@/components/ui/Table/AgeCell';
 import { PaginatedTable } from '@/components/resources/PaginatedTable';
-import { apiResourcesState } from '@/store/apiResources';
 import type { ApiResource } from '@/types';
 import { compareVersions } from 'compare-versions';
-import { currentClusterState } from '@/store/cluster';
-import { getVersion } from '@/store/version';
 import { useWS } from '@/context/WsContext';
+import { useConfig } from '@/context/ConfigContext';
 
 const columns: ColumnDef<any>[] = [
   {
@@ -23,10 +20,10 @@ const columns: ColumnDef<any>[] = [
     id: 'message',
     header: 'Message',
     cell: memo(({ row }) => {
-      const version = useVersionState();
+      const { serverInfo } = useConfig();
       return (
         <div>
-          {compareVersions(version.version.get(), '1.20') === 1
+          {serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1
             ? row.original.note
             : row.original.message}
         </div>
@@ -61,7 +58,7 @@ const columns: ColumnDef<any>[] = [
 
 export function ResourceEvents() {
   const { uid, namespace, name } = useLoaderData();
-  const version = useVersionState();
+  const { serverInfo } = useConfig();
   const [events, setEvents] = useState<Map<string, any>>(new Map());
   let navigate = useNavigate();
   const { listen } = useWS();
@@ -69,9 +66,8 @@ export function ResourceEvents() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     const listenEvents = async () => {
-      const server = currentClusterState.server.get();
-      unlisten = await listen(`${uid}-${server}-updated`, (payload: any) => {
-        if (compareVersions(version.version.get(), '1.20') === 1) {
+      unlisten = await listen(`${uid}-${serverInfo?.server}-updated`, (payload: any) => {
+        if (serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1) {
           if (payload?.regarding?.uid === uid) {
             setEvents((prev) => {
               const newMap = new Map(prev);
@@ -98,44 +94,39 @@ export function ResourceEvents() {
     };
   }, []);
 
-  const subscribeEvents = async (rv: string) => {
-    const resource = apiResourcesState.get().find((r: ApiResource) => {
-      if (compareVersions(version.version.get(), '1.20') === 1) {
+  const getAPIResource = () => {
+    return (serverInfo?.apiResources || []).find((r: ApiResource) => {
+      if (serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1) {
         return r.kind === 'Event' && r.group === 'events.k8s.io';
       } else {
         return r.kind === 'Event' && r.group === '';
       }
     });
+  };
+
+  const subscribeEvents = async (rv: string) => {
     await call('watch_events_dynamic_resource', {
       uid: uid,
-      request: {
-        ...resource,
+      apiResource: {
+        ...getAPIResource(),
         resource_version: rv,
       },
     });
   };
 
   const getPage = async ({ limit, continueToken }: { limit: number; continueToken?: string }) => {
-    const resource = apiResourcesState.get().find((r: ApiResource) => {
-      if (compareVersions(version.version.get(), '1.20') === 1) {
-        return r.kind === 'Event' && r.group === 'events.k8s.io';
-      } else {
-        return r.kind === 'Event' && r.group === '';
-      }
-    });
-
     return await call('list_events_dynamic_resource', {
       limit: limit,
       continueToken,
       uid: uid,
-      request: {
-        ...resource,
+      apiResource: {
+        ...getAPIResource(),
       },
     });
   };
   let kind: string;
   let group: string;
-  if (compareVersions(getVersion(), '1.20') === 1) {
+  if (serverInfo?.version && compareVersions(serverInfo?.version, '1.20') === 1) {
     kind = 'Event';
     group = 'events.k8s.io';
   } else {
@@ -172,6 +163,7 @@ export function ResourceEvents() {
         getPage={getPage}
         state={() => events as Map<string, any>}
         setState={setEvents}
+        apiResource={getAPIResource()}
         extractKey={(item) => item.metadata?.uid as string}
         columns={columns}
         namespaced={false}

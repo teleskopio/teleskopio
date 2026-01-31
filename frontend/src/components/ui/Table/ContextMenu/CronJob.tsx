@@ -19,9 +19,9 @@ export function CronJobTriggerMenu({
       className="text-xs"
       onClick={() => {
         call(`trigger_cronjob`, {
-          ...apiResource,
+          apiResource: { ...apiResource },
           namespace: obj.metadata?.namespace,
-          resourceName: obj.metadata?.name,
+          name: obj.metadata?.name,
         })
           .then((data) => {
             if (data.message) {

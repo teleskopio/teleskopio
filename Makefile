@@ -39,6 +39,9 @@ clean: ## Remove build related file
 lint: ./bin/$(LINTER_BIN) ## Lint sources with golangci-lint
 	./bin/$(LINTER_BIN) run
 
+lint-frontend: ## Lint frontend
+	cd frontend && pnpm run lint
+
 ## Run docker
 run-docker: ## Run docker container
 	docker run -it --rm -p 3080:3080 -v $(PWD)/config.yaml:/etc/config.yaml $(PROJECT_NAME) --config=/etc/config.yaml
@@ -46,10 +49,6 @@ run-docker: ## Run docker container
 ## Run frontend:
 run-frontend: ## Run
 	cd frontend && pnpm dev
-
-## Run pages:
-run-pages: ## Run
-	cd docs && pnpm start
 
 ## Run backend:
 run-backend: build ## Run

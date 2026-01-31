@@ -51,7 +51,7 @@ export function DeleteDialog({ apiResource, kind, rows, open, setOpenDialog }: D
             variant="destructive"
             onClick={() => {
               call('delete_dynamic_resources', {
-                request: apiResource,
+                apiResource: apiResource,
                 resources: rows.map((x) => ({
                   name: x.original.metadata.name,
                   namespace: x.original.metadata.namespace,

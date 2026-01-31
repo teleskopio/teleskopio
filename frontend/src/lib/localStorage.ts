@@ -6,3 +6,16 @@ export function getLocalBoolean(key: string, defaultValue = false): boolean {
 export function setLocalBoolean(key: string, value: boolean) {
   localStorage.setItem(key, value.toString());
 }
+
+export function getLocalKeyObject(key: string) {
+  const value = localStorage.getItem(key);
+  return value === null ? JSON.parse('{}') : JSON.parse(value);
+}
+
+export function setLocalKeyObject(key: string, value: any) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+export function delLocalKey(key: string) {
+  localStorage.removeItem(key);
+}

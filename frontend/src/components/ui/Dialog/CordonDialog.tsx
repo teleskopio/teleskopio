@@ -55,7 +55,7 @@ export function CordonDialog({ apiResource, kind, rows, open, setOpenDialog }: C
                 let request = {
                   cordon: cordoned(x.original) ? false : true,
                   name: x.original.metadata?.name,
-                  ...apiResource,
+                  apiResource: { ...apiResource },
                 };
                 call(`${cordoned(x.original) ? 'uncordon' : 'cordon'}_node`, {
                   ...request,

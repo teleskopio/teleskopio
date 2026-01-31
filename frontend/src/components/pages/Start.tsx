@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState } from 'react';
 import { Loader2, LogOut } from 'lucide-react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useloadingState } from '@/store/loader';
 import { DataTable } from '@/components/ui/DataTable';
 import columns from '@/components/pages/Start/Table/ColumnDef';
@@ -8,13 +9,16 @@ import { Input } from '@/components/ui/input';
 import { call } from '@/lib/api';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { useConfig } from '@/context/ConfigContext';
 import { useAuth } from '@/context/AuthProvider';
 
 export function StartPage() {
+  const location = useLocation();
   const configs = useConfigsState();
   const [searchQuery, setSearchQuery] = useState('');
   const loading = useloadingState();
   const { logout, AuthDisabled } = useAuth();
+  const { serverInfo } = useConfig();
 
   const fetchData = useCallback(async () => {
     try {
@@ -27,17 +31,11 @@ export function StartPage() {
 
   useEffect(() => {
     fetchData();
-
-    const interval = setInterval(() => {
-      if (!loading.get()) {
-        fetchData();
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
   }, [fetchData]);
 
-  return (
+  return serverInfo?.server ? (
+    <Navigate to="/resource/Node" replace state={{ from: location }} />
+  ) : (
     <div className="flex-grow overflow-auto">
       <div className="flex flex-row py-2 px-2 items-center justify-between">
         <Input

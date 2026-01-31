@@ -15,6 +15,30 @@ body {
   font-weight: 400;
   font-style: normal;
   overflow: hidden;
+  min-width: 600px;
+  min-height: 900px;
+}
+
+.mobile-banner {
+    display: none;
+    text-align: center;
+    padding: 10px;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+}
+
+/* Show the banner only on screens smaller than 1025px (e.g., mobile/tablet) */
+@media only screen and (max-width: 1024px) {
+    .mobile-banner {
+        color: var(--foreground) !important;
+        background-color: var(--background);
+        display: block;
+    }
+    .main-content {
+        display: none;
+    }
 }
 
 .source-code {

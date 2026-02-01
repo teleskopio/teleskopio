@@ -2,7 +2,7 @@ log_color: false # Color output (only work with text)
 log_json: true # Output logs as JSON
 log_level: INFO # Log Level
 server_http: ":3080" # HTTP address
-jwt_key: "super-salt" # salt for JWT token
+jwt_key: "super-salt" # salt for JWT token  `openssl rand -hex 20`
 auth_disabled: false # set to true to disable auth completly
 users:
   - username: admin

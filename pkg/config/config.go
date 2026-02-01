@@ -73,6 +73,7 @@ type Users struct {
 	Users map[string]User
 }
 
+//nolint:gocognit
 func Parse(configPath string) (Config, []*Cluster, Users, error) {
 	var cfg Config
 	clusters := []*Cluster{}

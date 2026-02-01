@@ -110,24 +110,18 @@ func (a *App) initServer(staticFiles embed.FS) error {
 		return err
 	}
 	router.Use(static.Serve("/", indexfs))
-	router.GET("/settings", func(c *gin.Context) {
-		c.FileFromFS("/", indexfs)
-	})
-	router.GET("/helm", func(c *gin.Context) {
-		c.FileFromFS("/", indexfs)
-	})
-	router.GET("/createkubernetesresource", func(c *gin.Context) {
-		c.FileFromFS("/", indexfs)
-	})
-	router.GET("/resource/Logs/:namespace/:name", func(c *gin.Context) {
-		c.FileFromFS("/", indexfs)
-	})
-	router.GET("/resource/:resource", func(c *gin.Context) {
-		c.FileFromFS("/", indexfs)
-	})
-	router.GET("/yaml/:resource/:name/:namespace", func(c *gin.Context) {
-		c.FileFromFS("/", indexfs)
-	})
+	for _, ro := range []string{
+		"/settings",
+		"/helm",
+		"/createkubernetesresource",
+		"/resource/Logs/:namespace/:name",
+		"/yaml/:resource/:name/:namespace",
+		"/resource/:resource",
+	} {
+		router.GET(ro, func(c *gin.Context) {
+			c.FileFromFS("/", indexfs)
+		})
+	}
 	router.NoRoute(func(c *gin.Context) {
 		slog.Debug("hit no route", "request uri", c.Request.RequestURI)
 		if strings.HasPrefix(c.Request.URL.Path, "/yaml") {

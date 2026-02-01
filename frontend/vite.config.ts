@@ -22,4 +22,12 @@ export default defineConfig(async () => ({
       '/api': 'http://localhost:3080',
     },
   },
+  // build: {
+  //   rollupOptions: {
+  //     input: {
+  //       main: resolve(__dirname, 'index.html'),
+  //       notfound: resolve(__dirname, 'public/404.html'),
+  //     },
+  //   },
+  // },
 }));

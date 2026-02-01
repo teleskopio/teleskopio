@@ -24,6 +24,10 @@ build: ## Build all the binaries and put the output in bin/
 build-frontend: ## Build frontend
 	cd frontend && pnpm build && cp -R dist ../
 
+## Build helm chart:
+build-helm-chart: ## Build helm chart
+	helm package ./deploy/teleskopio
+
 build-docker: ## Build an image
 	docker build --build-arg APP_VERSION=$(BRANCH)-$(HASH) -t $(PROJECT_NAME) .
 

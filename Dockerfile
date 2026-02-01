@@ -1,5 +1,5 @@
 FROM node:22.14.0-alpine AS frontend
-ENV NODE_ENV production
+ENV NODE_ENV=production
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g pnpm@10.9.0
 

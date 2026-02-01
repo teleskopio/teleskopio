@@ -1,0 +1,7 @@
+apiVersion: v2
+name: teleskopio
+description: A Helm chart for Teleskopio Kubernetes Dashboard
+type: application
+icon: https://github.com/teleskopio/teleskopio/blob/132d0feedc4b7134e6b0143f749529c315f61d50/assets/icon.png
+version: 0.1.4
+appVersion: "v0.1.4"

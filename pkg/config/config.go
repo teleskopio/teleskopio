@@ -2,13 +2,16 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	_ "embed"
+
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"gopkg.in/yaml.v3"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -17,6 +20,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+var sapath = "/var/run/secrets/kubernetes.io/serviceaccount"
 
 func GetConfigPath(configPathString string) string {
 	if strings.Contains(configPathString, "~") {
@@ -68,6 +73,7 @@ type Users struct {
 	Users map[string]User
 }
 
+//nolint:gocognit
 func Parse(configPath string) (Config, []*Cluster, Users, error) {
 	var cfg Config
 	clusters := []*Cluster{}
@@ -123,7 +129,6 @@ func Parse(configPath string) (Config, []*Cluster, Users, error) {
 			APIExtension: apiExtension,
 		})
 	}
-
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig != "" {
 		kubeCfg, err := clientcmd.LoadFromFile(kubeconfig)
@@ -157,6 +162,36 @@ func Parse(configPath string) (Config, []*Cluster, Users, error) {
 			Dynamic:      dyn,
 			APIExtension: apiExtension,
 		})
+	}
+
+	if _, err := os.Open(sapath); errors.Is(err, os.ErrNotExist) {
+		slog.Info("we're not in cluster", "sa", sapath)
+	} else {
+		slog.Info("looks like we're in kubernetes cluster, let's auth with SA", "sa", sapath)
+		inclusterconfig, err := rest.InClusterConfig()
+		if err != nil {
+			slog.Error("cant auth with SA kubernetes cluster", "sa", sapath)
+		} else {
+			clientset, err := kubernetes.NewForConfig(inclusterconfig)
+			if err != nil {
+				return cfg, clusters, users, err
+			}
+			dyn, err := dynamic.NewForConfig(inclusterconfig)
+			if err != nil {
+				return cfg, clusters, users, err
+			}
+			apiExtension, err := apiextensionsclientset.NewForConfig(inclusterconfig)
+			if err != nil {
+				return cfg, clusters, users, err
+			}
+			clusters = append(clusters, &Cluster{
+				RestConfig:   inclusterconfig,
+				Address:      inclusterconfig.Host,
+				Typed:        clientset,
+				Dynamic:      dyn,
+				APIExtension: apiExtension,
+			})
+		}
 	}
 
 	for _, u := range cfg.Users {

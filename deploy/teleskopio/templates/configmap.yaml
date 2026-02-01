@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-{{ $.Values.config.name }}
+  labels:
+    app: {{ .Values.appName }}
+data:
+  teleskopio.yaml: |
+    {{- toYaml $.Values.config.content | nindent 4 }}

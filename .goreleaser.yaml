@@ -37,3 +37,16 @@ homebrew_casks:
       owner: teleskopio
       name: homebrew-teleskopio
       branch: master
+
+# helm:
+#   - name: "teleskopio" # The name of your chart, usually derived from Chart.yaml
+#     repository:
+#       owner: "teleskopio"
+#       name: "teleskopio" # The repository name within the registry, often just 'helm' or the chart name
+#     registry: "ghcr.io" # Specify the GitHub Container Registry
+#     oci: true # Enable OCI support
+#     # Optionally, specify the directory where your Chart.yaml is located (default is current dir)
+#     chart_path: "./deploy/teleskopio"
+#     update_chart_version: true
+#     # Optionally, set a release name pattern
+#     release_name: "{{ .ChartName }}-{{ .Version }}"

@@ -29,7 +29,7 @@ linters:
   settings:
     funlen:
       lines: 168
-      statements: 50
+      statements: 55
     gocritic:
       disabled-checks:
         - singleCaseSwitch

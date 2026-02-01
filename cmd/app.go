@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	httpRouter "teleskopio/pkg/router"
 	webSocket "teleskopio/pkg/socket"
 
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 
 	"github.com/lmittmann/tint"
@@ -102,21 +105,53 @@ func (a *App) initServer(staticFiles embed.FS) error {
 	if err != nil {
 		return err
 	}
+	indexfs, err := static.EmbedFolder(staticFiles, "dist")
+	if err != nil {
+		return err
+	}
+	router.Use(static.Serve("/", indexfs))
+	for _, ro := range []string{
+		"/settings",
+		"/helm",
+		"/createkubernetesresource",
+		"/resource/Logs/:namespace/:name",
+		"/yaml/:resource/:name/:namespace",
+		"/resource/:resource",
+	} {
+		router.GET(ro, func(c *gin.Context) {
+			c.FileFromFS("/", indexfs)
+		})
+	}
 	router.NoRoute(func(c *gin.Context) {
-		if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
-			c.JSON(404, gin.H{"error": "not found"})
+		slog.Debug("hit no route", "request uri", c.Request.RequestURI)
+		if strings.HasPrefix(c.Request.URL.Path, "/yaml") {
+			re := regexp.MustCompile(`^(/[^/]+){3}`)
+			newPath := re.ReplaceAllString(c.Request.URL.Path, "")
+			c.Request.RequestURI = newPath
+			c.Request.URL.Path = newPath
+			c.FileFromFS(newPath, indexfs)
 			return
 		}
-
-		fileServer := http.FileServer(http.FS(staticFiles))
-		c.Request.URL.Path = "/dist" + c.Request.URL.Path
-		fileServer.ServeHTTP(c.Writer, c.Request)
+		if strings.HasPrefix(c.Request.URL.Path, "/resource/Logs") {
+			re := regexp.MustCompile(`^(/[^/]+){3}`)
+			newPath := re.ReplaceAllString(c.Request.URL.Path, "")
+			c.Request.RequestURI = newPath
+			c.Request.URL.Path = newPath
+			c.FileFromFS(newPath, indexfs)
+			return
+		}
+		if strings.HasPrefix(c.Request.URL.Path, "/resource") {
+			newPath := strings.TrimPrefix(c.Request.URL.Path, "/resource")
+			c.Request.RequestURI = newPath
+			c.Request.URL.Path = newPath
+			c.FileFromFS(newPath, indexfs)
+			return
+		}
+		c.FileFromFS("404.html", indexfs)
 	})
 
 	router.GET("/api/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "pong",
-		})
+		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 
 	// Liveness probe for Kubernetes
@@ -125,19 +160,13 @@ func (a *App) initServer(staticFiles embed.FS) error {
 	})
 	router.GET("/readyz", func(c *gin.Context) {
 		if a.isReady {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "ready",
-			})
+			c.JSON(http.StatusOK, gin.H{"message": "ready"})
 			return
 		}
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"message": "not ready",
-		})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "not ready"})
 	})
 	router.GET("/api/auth_disabled", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": a.Config.AuthDisabled,
-		})
+		c.JSON(http.StatusOK, gin.H{"message": a.Config.AuthDisabled})
 	})
 	router.POST("/api/login", r.Login)
 	auth := router.Group("/api")

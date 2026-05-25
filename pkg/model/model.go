@@ -3,6 +3,7 @@ package model
 import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/golang-jwt/jwt/v5"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type Claims struct {
@@ -61,6 +62,14 @@ func (a *APIResource) Validate() error {
 		validation.Field(&a.Version, validation.Required),
 		validation.Field(&a.Resource, validation.Required),
 	)
+}
+
+func (a *APIResource) GetGVR() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    a.Group,
+		Version:  a.Version,
+		Resource: a.Resource,
+	}
 }
 
 type ListRequest struct {

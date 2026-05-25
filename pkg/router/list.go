@@ -19,7 +19,7 @@ func (r *Route) ListCustomResourceDefinitions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, []interface{}{crdList.Items, crdList.Continue, crdList.ResourceVersion})
+	c.JSON(http.StatusOK, []any{crdList.Items, crdList.Continue, crdList.ResourceVersion})
 }
 
 func (r *Route) ListResources(c *gin.Context) {
@@ -47,7 +47,7 @@ func (r *Route) ListDynamicResource(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, []interface{}{items, continueToken, resourceVersion})
+	c.JSON(http.StatusOK, []any{items, continueToken, resourceVersion})
 }
 
 func (r *Route) ListEventsDynamicResource(c *gin.Context) {

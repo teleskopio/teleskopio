@@ -2,7 +2,6 @@ package router
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,26 +11,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (r *Route) GetPodLogs(c *gin.Context) {
 	var req model.PodLogRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("parsing", "err", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-
-	podLogOptions := &v1.PodLogOptions{
+	podLogs, err := r.kapi.GetPodLogsReader(c.Request.Context(), req, &corev1.PodLogOptions{
 		TailLines: req.TailLines,
 		Container: req.Container,
-	}
-	logsReq := r.GetCluster(req.Server).Typed.CoreV1().Pods(req.Namespace).GetLogs(req.Name, podLogOptions)
-	podLogs, err := logsReq.Stream(context.Background())
+	})
 	if err != nil {
-		slog.Error("get stream", "err", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
@@ -40,7 +34,6 @@ func (r *Route) GetPodLogs(c *gin.Context) {
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, podLogs)
 	if err != nil {
-		slog.Error("copy stream", "err", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
@@ -52,41 +45,38 @@ func (r *Route) GetPodLogs(c *gin.Context) {
 		}
 		lines = append(lines, line)
 	}
-
 	c.JSON(http.StatusOK, lines)
 }
 
 func (r *Route) StreamPodLogs(c *gin.Context) {
 	var req model.PodLogRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Error("parsing", "err", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	timeNow := metav1.NewTime(time.Now())
+	podLogOptions := &corev1.PodLogOptions{
+		Follow:    true,
+		Container: req.Container,
+	}
+	podLogOptions.SinceTime = &timeNow
+	podLogs, err := r.kapi.GetPodLogsReader(c.Request.Context(), req, podLogOptions)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
-	podLogOptions := &v1.PodLogOptions{
-		Follow:    true,
-		Container: req.Container,
-	}
-	timeNow := metav1.NewTime(time.Now())
-	podLogOptions.SinceTime = &timeNow
-	logsReq := r.GetCluster(req.Server).Typed.CoreV1().Pods(req.Namespace).GetLogs(req.Name, podLogOptions)
-	podLogs, err := logsReq.Stream(context.Background())
-	if err != nil {
-		slog.Error("get stream", "err", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
 	// TODO might be a collision with another server
 	podLogsKey := fmt.Sprintf("pod_log_line_%s_%s", req.Name, req.Namespace)
 	if _, ok := r.podLogsWatchers[podLogsKey]; ok {
-		slog.Info("pod logs exist", "key", podLogsKey)
 		c.JSON(http.StatusOK, gin.H{"success": ""})
 		return
 	}
 	r.podLogsWatchers[podLogsKey] = make(chan bool)
 	stopAndClean := func() {
 		slog.Debug("stop pod logs stream", "pod", podLogsKey)
+		podlogsChan := r.podLogsWatchers[podLogsKey]
+		close(podlogsChan)
 		delete(r.podLogsWatchers, podLogsKey)
 		podLogs.Close()
 	}

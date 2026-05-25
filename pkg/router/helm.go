@@ -27,7 +27,7 @@ func (r *Route) ListHelmReleases(c *gin.Context) {
 	flags := genericclioptions.NewConfigFlags(false)
 	// Spoof kube config on the fly
 	flags.WrapConfigFn = func(_ *rest.Config) *rest.Config {
-		// return r.kapi.GetRestConfig(req)
+		return r.kapi.GetRestConfig(req.Server)
 	}
 	var result []*release.Release
 	slog.Debug("get releases", "ns", len(req.Namespaces))
@@ -52,7 +52,7 @@ func (r *Route) ListHelmReleases(c *gin.Context) {
 
 	// TODO stop all watchers
 	if _, ok := r.helmWathers[req.Server]; !ok {
-		r.helmWathers[req.Server] = icache.NewCacheInformers(c.Request.Context(), make(chan struct{}), r.GetCluster(req.Server).Typed, cache.ResourceEventHandlerFuncs{
+		r.helmWathers[req.Server] = icache.NewCacheInformers(c.Request.Context(), make(chan struct{}), r.kapi.GetClientSet(req.Server).Typed, cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				sec := obj.(*v1.Secret)
 				slog.Debug("add", "sec", sec.Labels)
@@ -111,7 +111,7 @@ func (r *Route) GetHelmRelease(c *gin.Context) {
 	flags := genericclioptions.NewConfigFlags(false)
 	// Spoof kube config on the fly
 	flags.WrapConfigFn = func(_ *rest.Config) *rest.Config {
-		// return r.kapi.GetRestConfig(req)
+		return r.kapi.GetRestConfig(req.Server)
 	}
 	actionConfig := new(action.Configuration)
 	if err := actionConfig.Init(flags, req.Namespace, "secret", slog.Default().Info); err != nil {

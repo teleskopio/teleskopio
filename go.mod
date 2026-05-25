@@ -10,6 +10,7 @@ require (
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/lmittmann/tint v1.0.4
 	github.com/mark3labs/mcp-go v0.54.0
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	golang.org/x/crypto v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.19.4

@@ -6,12 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"teleskopio/pkg/config"
 	"teleskopio/pkg/model"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/kubectl/pkg/drain"
+
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -20,14 +26,21 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+
+	"github.com/patrickmn/go-cache"
 )
 
 type KubeAPI struct {
 	clusters []*config.Cluster
+	cache    *cache.Cache
 }
 
 func New(clusters []*config.Cluster) *KubeAPI {
-	return &KubeAPI{clusters: clusters}
+	return &KubeAPI{
+		clusters: clusters,
+		// TODO longer expiration?
+		cache: cache.New(1*time.Minute, 10*time.Minute),
+	}
 }
 
 func (k *KubeAPI) GetClusters() []model.Cluster {
@@ -97,31 +110,10 @@ func (k *KubeAPI) ListDynamicResource(ctx context.Context, req model.ListRequest
 	if err := req.Validate(); err != nil {
 		return nil, "", "", err
 	}
-	apiResourceList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.APIResource.Group,
-		Version: req.APIResource.Version,
-	}.String())
+	ri, err := k.GetResourceInterface(req.Server, req.Namespace, &req.APIResource)
 	if err != nil {
 		return nil, "", "", err
 	}
-
-	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
-			req.APIResource.Resource = r.Name
-		}
-	}
-	gvr := schema.GroupVersionResource{
-		Group:    req.APIResource.Group,
-		Version:  req.APIResource.Version,
-		Resource: req.APIResource.Resource,
-	}
-	var ri dynamic.ResourceInterface
-	if req.Namespace != "" {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
-	} else {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr)
-	}
-
 	list, err := ri.List(ctx, metav1.ListOptions{
 		Limit:    req.Limit,
 		Continue: req.Continue,
@@ -129,7 +121,6 @@ func (k *KubeAPI) ListDynamicResource(ctx context.Context, req model.ListRequest
 	if err != nil {
 		return nil, "", "", err
 	}
-
 	for i := range list.Items {
 		list.Items[i].SetAPIVersion(req.APIResource.Version)
 		if req.APIResource.Group != "" {
@@ -152,30 +143,9 @@ func (k *KubeAPI) ListEventsDynamicResource(ctx context.Context, req model.ListR
 	if err := req.Validate(); err != nil {
 		return nil, "", "", err
 	}
-
-	apiResourceList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.APIResource.Group,
-		Version: req.APIResource.Version,
-	}.String())
+	ri, err := k.GetResourceInterface(req.Server, req.Namespace, &req.APIResource)
 	if err != nil {
 		return nil, "", "", err
-	}
-
-	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
-			req.APIResource.Resource = r.Name
-		}
-	}
-	gvr := schema.GroupVersionResource{
-		Group:    req.APIResource.Group,
-		Version:  req.APIResource.Version,
-		Resource: req.APIResource.Resource,
-	}
-	var ri dynamic.ResourceInterface
-	if req.Namespace != "" {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
-	} else {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr)
 	}
 	fieldSelector := ""
 	if req.APIResource.Group == "" {
@@ -189,7 +159,7 @@ func (k *KubeAPI) ListEventsDynamicResource(ctx context.Context, req model.ListR
 		FieldSelector: fieldSelector,
 	}
 
-	list, err := ri.List(context.TODO(), listParams)
+	list, err := ri.List(ctx, listParams)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -212,36 +182,11 @@ func (k *KubeAPI) ListEventsDynamicResource(ctx context.Context, req model.ListR
 	return list.Items, continueToken, resourceVersion, nil
 }
 
-func (k *KubeAPI) GetRestConfig(req model.HelmRelease) *rest.Config {
-	return k.getClient(req.Server).RestConfig
-}
-
 func (k *KubeAPI) GetDynamicResource(ctx context.Context, req model.GetRequest) (*unstructured.Unstructured, error) {
-	apiResourceList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.APIResource.Group,
-		Version: req.APIResource.Version,
-	}.String())
+	ri, err := k.GetResourceInterface(req.Server, req.Namespace, &req.APIResource)
 	if err != nil {
 		return nil, err
 	}
-
-	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
-			req.APIResource.Resource = r.Name
-		}
-	}
-	gvr := schema.GroupVersionResource{
-		Group:    req.APIResource.Group,
-		Version:  req.APIResource.Version,
-		Resource: req.APIResource.Resource,
-	}
-	var ri dynamic.ResourceInterface
-	if req.Namespace != "" {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr).Namespace(req.Namespace)
-	} else {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr)
-	}
-
 	res, err := ri.Get(ctx, req.Name, metav1.GetOptions{})
 	return res, err
 }
@@ -299,64 +244,18 @@ func (k *KubeAPI) CreateOrUpdateKubeResource(ctx context.Context, req model.Obje
 	return result, err
 }
 
-func (k *KubeAPI) NodeOperation(ctx context.Context, req model.NodeOperation) error {
-	// TODO validate
-	apiResourceList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.APIResource.Group,
-		Version: req.APIResource.Version,
-	}.String())
-	if err != nil {
-		return err
-	}
-
-	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
-			req.APIResource.Resource = r.Name
-		}
-	}
-	gvr := schema.GroupVersionResource{
-		Group:    req.APIResource.Group,
-		Version:  req.APIResource.Version,
-		Resource: req.APIResource.Resource,
-	}
-	ri := k.getClient(req.Server).Dynamic.Resource(gvr)
-
-	payload := []struct {
-		Op    string `json:"op"`
-		Path  string `json:"path"`
-		Value bool   `json:"value"`
-	}{{
-		Op:    "replace",
-		Path:  "/spec/unschedulable",
-		Value: req.Cordon,
-	}}
-	payloadBytes, _ := json.Marshal(payload)
-
-	if _, err := ri.Patch(ctx, req.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{}); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (k *KubeAPI) TriggerCronjob(ctx context.Context, req model.TriggerCronjob) (string, error) {
-	apiResourceList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.APIResource.Group,
-		Version: req.APIResource.Version,
-	}.String())
+	apiResourceList, err := k.getResource(req.Server, req.APIResource)
 	if err != nil {
 		return "", err
 	}
 
-	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
-			req.APIResource.Resource = r.Name
-		}
-	}
+	k.setResource(&req.APIResource, apiResourceList)
+
 	cronJob, err := k.getClient(req.Server).Typed.BatchV1().CronJobs(req.Namespace).Get(ctx, req.Name, metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
-
 	jobSpec := cronJob.Spec.JobTemplate.Spec
 	jobName := fmt.Sprintf("%s-manual-%d", req.Name, metav1.Now().Unix())
 
@@ -375,24 +274,13 @@ func (k *KubeAPI) TriggerCronjob(ctx context.Context, req model.TriggerCronjob) 
 
 func (k *KubeAPI) ScaleResource(ctx context.Context, req model.ResourceOperation) error {
 	// TODO validate
-	apiResourceList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.APIResource.Group,
-		Version: req.APIResource.Version,
-	}.String())
+	apiResourceList, err := k.getResource(req.Server, req.APIResource)
 	if err != nil {
 		return err
 	}
 
-	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
-			req.APIResource.Resource = r.Name
-		}
-	}
-	gvr := schema.GroupVersionResource{
-		Group:    req.APIResource.Group,
-		Version:  req.APIResource.Version,
-		Resource: req.APIResource.Resource,
-	}
+	k.setResource(&req.APIResource, apiResourceList)
+	gvr := req.APIResource.GetGVR()
 	resource, err := k.getClient(req.Server).Dynamic.Resource(gvr).
 		Namespace(req.Namespace).
 		Get(ctx, req.Name, metav1.GetOptions{})
@@ -413,24 +301,13 @@ func (k *KubeAPI) ScaleResource(ctx context.Context, req model.ResourceOperation
 
 func (k *KubeAPI) DeleteDynamicResources(ctx context.Context, req model.DeleteRequest) error {
 	// TODO validate
-	apiResourceList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   req.APIResource.Group,
-		Version: req.APIResource.Version,
-	}.String())
+	apiResourceList, err := k.getResource(req.Server, req.APIResource)
 	if err != nil {
 		return err
 	}
 
-	for _, r := range apiResourceList.APIResources {
-		if r.Kind == req.APIResource.Kind && r.SingularName == strings.ToLower(req.APIResource.Kind) {
-			req.APIResource.Resource = r.Name
-		}
-	}
-	gvr := schema.GroupVersionResource{
-		Group:    req.APIResource.Group,
-		Version:  req.APIResource.Version,
-		Resource: req.APIResource.Resource,
-	}
+	k.setResource(&req.APIResource, apiResourceList)
+	gvr := req.APIResource.GetGVR()
 	if req.APIResource.Namespaced {
 		for _, res := range req.Resources {
 			if err := k.getClient(req.Server).Dynamic.Resource(gvr).Namespace(res.Namespace).Delete(ctx, res.Name, metav1.DeleteOptions{}); err != nil {
@@ -447,6 +324,100 @@ func (k *KubeAPI) DeleteDynamicResources(ctx context.Context, req model.DeleteRe
 	return nil
 }
 
+func (k *KubeAPI) GetPodLogsReader(ctx context.Context, req model.PodLogRequest, podLogOptions *corev1.PodLogOptions) (io.ReadCloser, error) {
+	// TODO validate
+	logsReq := k.getClient(req.Server).Typed.CoreV1().Pods(req.Namespace).GetLogs(req.Name, podLogOptions)
+	podLogs, err := logsReq.Stream(ctx)
+	return podLogs, err
+}
+
+func (k *KubeAPI) NodeOperation(ctx context.Context, req model.NodeOperation) error {
+	// TODO validate
+	apiResourceList, err := k.getResource(req.Server, req.APIResource)
+	if err != nil {
+		return err
+	}
+
+	k.setResource(&req.APIResource, apiResourceList)
+	ri := k.getClient(req.Server).Dynamic.Resource(req.APIResource.GetGVR())
+
+	payload := []struct {
+		Op    string `json:"op"`
+		Path  string `json:"path"`
+		Value bool   `json:"value"`
+	}{{
+		Op:    "replace",
+		Path:  "/spec/unschedulable",
+		Value: req.Cordon,
+	}}
+	payloadBytes, _ := json.Marshal(payload)
+
+	if _, err := ri.Patch(ctx, req.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (k *KubeAPI) NodeDrain(ctx context.Context, req model.NodeDrain, onDelete func(pod *corev1.Pod, usingEviction bool)) (*corev1.Node, error) {
+	// TODO validate
+	node, err := k.getClient(req.Server).Typed.CoreV1().Nodes().Get(ctx, req.ResourceName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	drainer := &drain.Helper{
+		Ctx:                   ctx,
+		Client:                k.getClient(req.Server).Typed,
+		Force:                 req.DrainForce,
+		IgnoreAllDaemonSets:   req.IgnoreAllDaemonSets,
+		DeleteEmptyDirData:    req.DeleteEmptyDirData,
+		Timeout:               time.Duration(req.DrainTimeout) * time.Second,
+		Out:                   os.Stdout,
+		ErrOut:                os.Stderr,
+		OnPodDeletedOrEvicted: onDelete,
+	}
+	if err := drain.RunCordonOrUncordon(drainer, node, true); err != nil {
+		return nil, err
+	}
+	return node, drain.RunNodeDrain(drainer, req.ResourceName)
+}
+
+func (k *KubeAPI) GetRestConfig(server string) *rest.Config {
+	return k.getClient(server).RestConfig
+}
+
+func (k *KubeAPI) setResource(req *model.APIResource, apiResourceList *metav1.APIResourceList) {
+	for _, r := range apiResourceList.APIResources {
+		if r.Kind == req.Kind && r.SingularName == strings.ToLower(req.Kind) {
+			req.Resource = r.Name
+		}
+	}
+}
+
+func (k *KubeAPI) getResource(server string, req model.APIResource) (*metav1.APIResourceList, error) {
+	apiResourceList, found := k.cache.Get("apiResourceList")
+	if !found {
+		apiResourceList, err := k.getClient(server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
+			Group:   req.Group,
+			Version: req.Version,
+		}.String())
+		if err != nil {
+			return nil, err
+		}
+		k.cache.Set("apiResourceList", apiResourceList, cache.DefaultExpiration)
+		return apiResourceList, nil
+	}
+	return apiResourceList.(*metav1.APIResourceList), nil
+}
+
+func (k *KubeAPI) GetClientSet(server string) *config.Cluster {
+	for _, c := range k.clusters {
+		if c.Address == server {
+			return c
+		}
+	}
+	return nil
+}
+
 func (k *KubeAPI) getClient(server string) *config.Cluster {
 	for _, c := range k.clusters {
 		if c.Address == server {
@@ -454,4 +425,21 @@ func (k *KubeAPI) getClient(server string) *config.Cluster {
 		}
 	}
 	return nil
+}
+
+func (k *KubeAPI) GetResourceInterface(server, ns string, resource *model.APIResource) (dynamic.ResourceInterface, error) {
+	apiResourceList, err := k.getResource(server, *resource)
+	if err != nil {
+		return nil, err
+	}
+	k.setResource(resource, apiResourceList)
+	gvr := resource.GetGVR()
+
+	var ri dynamic.ResourceInterface
+	if ns != "" {
+		ri = k.getClient(server).Dynamic.Resource(gvr).Namespace(ns)
+	} else {
+		ri = k.getClient(server).Dynamic.Resource(gvr)
+	}
+	return ri, nil
 }

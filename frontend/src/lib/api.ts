@@ -42,3 +42,17 @@ export async function call<T = any>(action: string, payload?: InvokePayload): Pr
   });
   return res.json();
 }
+
+export async function cleanup() {
+  const config = getLocalKeyObject('currentCluster');
+  const token = localStorage.getItem('token');
+  const server = config.server;
+  await fetch(`/api/cleanup`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token ? token : '',
+    },
+    body: JSON.stringify({ server }),
+  });
+}

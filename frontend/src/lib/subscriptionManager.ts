@@ -7,7 +7,7 @@ export async function addSubscription(listenerPromise: () => void): Promise<void
   subscriptions.push(unlisten);
 }
 
-export function removeAllSubscriptions(): void {
+export async function removeAllSubscriptions() {
   while (subscriptions.length > 0) {
     const unlisten = subscriptions.pop();
     try {

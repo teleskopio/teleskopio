@@ -11,6 +11,7 @@ import { flushAllStates } from '@/store/resources';
 import { useCrdResourcesState } from '@/store/crdResources';
 import { Input } from '@/components/ui/input';
 import { useConfig } from '@/context/ConfigContext';
+import { cleanup } from '@/lib/api';
 
 export function Header({
   setSearchQuery,
@@ -109,7 +110,8 @@ export function Header({
             title="disconnect cluster"
             className="bg-red-500 hover:bg-red-400"
             onClick={() => {
-              toast.warning(<div>Disconnect cluster {serverInfo?.server}</div>);
+              toast.warning(<div>Disconnect from cluster {serverInfo?.server}</div>);
+              cleanup();
               deleteConfig();
               flushAllStates();
               crdResources.set(new Map());

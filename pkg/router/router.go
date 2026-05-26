@@ -3,9 +3,11 @@ package router
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"teleskopio/pkg/config"
+	"teleskopio/pkg/genericmap"
 	"teleskopio/pkg/kubeapi"
 	"teleskopio/pkg/model"
 
@@ -27,19 +29,21 @@ type Route struct {
 	hub   *webSocket.Hub
 	// TODO
 	// Add mutex
-	watchers        map[string]w.Interface
-	helmWathers     map[string]informers.SharedInformerFactory
+	watchers        *genericmap.Map[string, w.Interface]
+	helmWathers     *genericmap.Map[string, informers.SharedInformerFactory]
 	podLogsWatchers map[string]chan (bool)
 }
 
 func New(hub *webSocket.Hub, cfg *config.Config, kapi *kubeapi.KubeAPI, users *config.Users) (Route, error) {
+	watchersMap := &genericmap.Map[string, w.Interface]{}
+	helmWatchersMap := &genericmap.Map[string, informers.SharedInformerFactory]{}
 	r := Route{
 		cfg:             cfg,
 		kapi:            kapi,
 		users:           users,
 		hub:             hub,
-		watchers:        make(map[string]w.Interface),
-		helmWathers:     make(map[string]informers.SharedInformerFactory),
+		watchers:        watchersMap,
+		helmWathers:     helmWatchersMap,
 		podLogsWatchers: make(map[string]chan bool),
 	}
 	return r, nil // TODO
@@ -151,6 +155,31 @@ func (r *Route) TriggerCronjob(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": jobName})
+}
+
+func (r *Route) CleanUp(c *gin.Context) {
+	var req model.PayloadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	r.watchers.Range(func(k string, v w.Interface) bool {
+		if strings.Contains(k, req.Server) {
+			slog.Debug("stop watcher", "k", k)
+			v.Stop()
+		}
+		return true
+	})
+	r.helmWathers.Range(func(k string, v informers.SharedInformerFactory) bool {
+		slog.Debug("helm watcher", "k", k)
+		// TODO
+		return true
+	})
+	c.JSON(http.StatusOK, gin.H{"message": "cleanup"})
 }
 
 func (r *Route) Login(c *gin.Context) {

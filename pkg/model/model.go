@@ -112,12 +112,33 @@ type GetRequest struct {
 	APIResource APIResource `json:"apiResource"`
 }
 
+func (g *GetRequest) Validate() error {
+	if err := validation.ValidateStruct(g,
+		validation.Field(&g.Server, validation.Required),
+	); err != nil {
+		return err
+	}
+	if err := g.APIResource.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 type PodLogRequest struct {
 	Server    string `json:"server"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 	Container string `json:"container"`
 	TailLines *int64 `json:"tail_lines"`
+}
+
+func (p *PodLogRequest) Validate() error {
+	return validation.ValidateStruct(p,
+		validation.Field(&p.Server, validation.Required),
+		validation.Field(&p.Name, validation.Required),
+		validation.Field(&p.Namespace, validation.Required),
+		validation.Field(&p.Container, validation.Required),
+	)
 }
 
 type DeleteRequest struct {
@@ -130,11 +151,28 @@ type DeleteRequest struct {
 	APIResource APIResource `json:"apiResource"`
 }
 
+func (d *DeleteRequest) Validate() error {
+	return validation.ValidateStruct(d,
+		validation.Field(&d.Server, validation.Required),
+		validation.Field(&d.Resources, validation.Required),
+	)
+}
+
 type ObjectRequest struct {
 	Server    string `json:"server"`
 	Namespace string `json:"namespace"`
 
 	Yaml string `json:"yaml"`
+}
+
+func (o *ObjectRequest) Validate() error {
+	if err := validation.ValidateStruct(o,
+		validation.Field(&o.Server, validation.Required),
+		validation.Field(&o.Yaml, validation.Required),
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 type NodeOperation struct {
@@ -175,6 +213,14 @@ type TriggerCronjob struct {
 	APIResource APIResource `json:"apiResource"`
 }
 
+func (t *TriggerCronjob) Validate() error {
+	return validation.ValidateStruct(t,
+		validation.Field(&t.Server, validation.Required),
+		validation.Field(&t.Name, validation.Required),
+		validation.Field(&t.Namespace, validation.Required),
+	)
+}
+
 type ResourceOperation struct {
 	Server    string `json:"server"`
 	Name      string `json:"name"`
@@ -182,4 +228,12 @@ type ResourceOperation struct {
 	Replicas  int64  `json:"replicas"`
 
 	APIResource APIResource `json:"apiResource"`
+}
+
+func (r *ResourceOperation) Validate() error {
+	return validation.ValidateStruct(r,
+		validation.Field(&r.Server, validation.Required),
+		validation.Field(&r.Name, validation.Required),
+		validation.Field(&r.Namespace, validation.Required),
+	)
 }

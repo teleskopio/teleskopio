@@ -33,7 +33,7 @@ func (r *Route) WatchDynamicResource(c *gin.Context) {
 		return
 	}
 	ch := watch.ResultChan()
-	r.watchers[watcherKey] = watch
+	r.watchers.Store(watcherKey, watch)
 	gvr := req.APIResource.GetGVR()
 	slog.Info("Watching ...", "gvr", gvr.String())
 	go func() {
@@ -55,7 +55,7 @@ func (r *Route) WatchDynamicResource(c *gin.Context) {
 				r.hub.Broadcast(payload)
 			case w.Error:
 				slog.Error("watching error", "gvr", gvr.String(), "watchKey", watcherKey, "error", event.Object.DeepCopyObject().GetObjectKind())
-				delete(r.watchers, watcherKey)
+				r.watchers.Delete(watcherKey)
 			}
 		}
 	}()
@@ -76,7 +76,7 @@ func (r *Route) WatchEventsDynamicResource(c *gin.Context) {
 	}
 	gvr := req.APIResource.GetGVR()
 	watcherKey := fmt.Sprintf("%s-%s-updated", req.UID, req.Server)
-	_, ok := r.watchers[watcherKey]
+	_, ok := r.watchers.Load(watcherKey)
 	if ok {
 		slog.Info("watcher exist", "gvr", gvr.String(), "key", watcherKey)
 		c.JSON(http.StatusOK, gin.H{"success": ""})
@@ -97,7 +97,7 @@ func (r *Route) WatchEventsDynamicResource(c *gin.Context) {
 		return
 	}
 	ch := watch.ResultChan()
-	r.watchers[watcherKey] = watch
+	r.watchers.Store(watcherKey, watch)
 	slog.Info("Watching ...", "gvr", gvr.String())
 	go func() {
 		for event := range ch {
@@ -111,7 +111,7 @@ func (r *Route) WatchEventsDynamicResource(c *gin.Context) {
 				r.hub.Broadcast(payload)
 			case w.Error:
 				slog.Error("watching error", "gvr", gvr.String(), "watchKey", watcherKey, "error", event.Object.DeepCopyObject().GetObjectKind())
-				delete(r.watchers, watcherKey)
+				r.watchers.Delete(watcherKey)
 			}
 		}
 	}()

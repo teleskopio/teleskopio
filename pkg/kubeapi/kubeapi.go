@@ -25,19 +25,22 @@ import (
 	k8sYAML "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 
 	"github.com/patrickmn/go-cache"
 )
 
 type KubeAPI struct {
-	clusters []*config.Cluster
+	clusters map[string]*config.Cluster
 	cache    *cache.Cache
 }
 
 func New(clusters []*config.Cluster) *KubeAPI {
+	clustersMap := map[string]*config.Cluster{}
+	for _, c := range clusters {
+		clustersMap[c.Address] = c
+	}
 	return &KubeAPI{
-		clusters: clusters,
+		clusters: clustersMap,
 		// TODO longer expiration?
 		cache: cache.New(1*time.Minute, 10*time.Minute),
 	}
@@ -55,18 +58,23 @@ func (k *KubeAPI) GetVersion(req model.PayloadRequest) (*version.Info, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
-	ver, err := k.getClient(req.Server).Typed.Discovery().ServerVersion()
+	server, err := k.getClient(req.Server)
 	if err != nil {
 		return nil, err
 	}
-	return ver, nil
+	ver, err := server.Typed.Discovery().ServerVersion()
+	return ver, err
 }
 
 func (k *KubeAPI) ListCustomResourceDefinitions(ctx context.Context, req model.PayloadRequest) (*v1.CustomResourceDefinitionList, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
-	crdList, err := k.getClient(req.Server).APIExtension.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return nil, err
+	}
+	crdList, err := server.APIExtension.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +85,11 @@ func (k *KubeAPI) ListResources(req model.PayloadRequest) ([]model.APIResource, 
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
-	discoveryClient := k.getClient(req.Server).Typed.Discovery()
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return nil, err
+	}
+	discoveryClient := server.Typed.Discovery()
 	apiGroupResources, err := discoveryClient.ServerPreferredResources()
 	if err != nil {
 		return nil, err
@@ -183,6 +195,9 @@ func (k *KubeAPI) ListEventsDynamicResource(ctx context.Context, req model.ListR
 }
 
 func (k *KubeAPI) GetDynamicResource(ctx context.Context, req model.GetRequest) (*unstructured.Unstructured, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	ri, err := k.GetResourceInterface(req.Server, req.Namespace, &req.APIResource)
 	if err != nil {
 		return nil, err
@@ -192,7 +207,13 @@ func (k *KubeAPI) GetDynamicResource(ctx context.Context, req model.GetRequest) 
 }
 
 func (k *KubeAPI) CreateOrUpdateKubeResource(ctx context.Context, req model.ObjectRequest, op string) (*unstructured.Unstructured, error) {
-	// TODO validate
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return nil, err
+	}
 	decoder := k8sYAML.NewYAMLOrJSONDecoder(bytes.NewReader([]byte(req.Yaml)), 1024)
 	obj := &unstructured.Unstructured{}
 	if err := decoder.Decode(obj); err != nil && err != io.EOF {
@@ -201,7 +222,7 @@ func (k *KubeAPI) CreateOrUpdateKubeResource(ctx context.Context, req model.Obje
 
 	gvk := obj.GroupVersionKind()
 
-	apiResList, err := k.getClient(req.Server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
+	apiResList, err := server.Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
 		Group:   gvk.Group,
 		Version: gvk.Version,
 	}.String())
@@ -229,9 +250,9 @@ func (k *KubeAPI) CreateOrUpdateKubeResource(ctx context.Context, req model.Obje
 	ns := obj.GetNamespace()
 	var ri dynamic.ResourceInterface
 	if ns != "" {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr).Namespace(ns)
+		ri = server.Dynamic.Resource(gvr).Namespace(ns)
 	} else {
-		ri = k.getClient(req.Server).Dynamic.Resource(gvr)
+		ri = server.Dynamic.Resource(gvr)
 	}
 
 	var result *unstructured.Unstructured
@@ -245,6 +266,14 @@ func (k *KubeAPI) CreateOrUpdateKubeResource(ctx context.Context, req model.Obje
 }
 
 func (k *KubeAPI) TriggerCronjob(ctx context.Context, req model.TriggerCronjob) (string, error) {
+	if err := req.Validate(); err != nil {
+		return "", err
+	}
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return "", err
+	}
+
 	apiResourceList, err := k.getResource(req.Server, req.APIResource)
 	if err != nil {
 		return "", err
@@ -252,14 +281,14 @@ func (k *KubeAPI) TriggerCronjob(ctx context.Context, req model.TriggerCronjob) 
 
 	k.setResource(&req.APIResource, apiResourceList)
 
-	cronJob, err := k.getClient(req.Server).Typed.BatchV1().CronJobs(req.Namespace).Get(ctx, req.Name, metav1.GetOptions{})
+	cronJob, err := server.Typed.BatchV1().CronJobs(req.Namespace).Get(ctx, req.Name, metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
 	jobSpec := cronJob.Spec.JobTemplate.Spec
 	jobName := fmt.Sprintf("%s-manual-%d", req.Name, metav1.Now().Unix())
 
-	_, err = k.getClient(req.Server).Typed.BatchV1().Jobs(req.Namespace).Create(ctx, &batchv1.Job{
+	_, err = server.Typed.BatchV1().Jobs(req.Namespace).Create(ctx, &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
 			Namespace: req.Namespace,
@@ -273,7 +302,14 @@ func (k *KubeAPI) TriggerCronjob(ctx context.Context, req model.TriggerCronjob) 
 }
 
 func (k *KubeAPI) ScaleResource(ctx context.Context, req model.ResourceOperation) error {
-	// TODO validate
+	if err := req.Validate(); err != nil {
+		return err
+	}
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return err
+	}
+
 	apiResourceList, err := k.getResource(req.Server, req.APIResource)
 	if err != nil {
 		return err
@@ -281,7 +317,7 @@ func (k *KubeAPI) ScaleResource(ctx context.Context, req model.ResourceOperation
 
 	k.setResource(&req.APIResource, apiResourceList)
 	gvr := req.APIResource.GetGVR()
-	resource, err := k.getClient(req.Server).Dynamic.Resource(gvr).
+	resource, err := server.Dynamic.Resource(gvr).
 		Namespace(req.Namespace).
 		Get(ctx, req.Name, metav1.GetOptions{})
 	if err != nil {
@@ -291,7 +327,7 @@ func (k *KubeAPI) ScaleResource(ctx context.Context, req model.ResourceOperation
 	if err := unstructured.SetNestedField(unstr.Object, req.Replicas, "spec", "replicas"); err != nil {
 		return err
 	}
-	if _, err := k.getClient(req.Server).Dynamic.Resource(gvr).
+	if _, err := server.Dynamic.Resource(gvr).
 		Namespace(req.Namespace).
 		Update(ctx, unstr, metav1.UpdateOptions{}); err != nil {
 		return err
@@ -300,7 +336,14 @@ func (k *KubeAPI) ScaleResource(ctx context.Context, req model.ResourceOperation
 }
 
 func (k *KubeAPI) DeleteDynamicResources(ctx context.Context, req model.DeleteRequest) error {
-	// TODO validate
+	if err := req.Validate(); err != nil {
+		return err
+	}
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return err
+	}
+
 	apiResourceList, err := k.getResource(req.Server, req.APIResource)
 	if err != nil {
 		return err
@@ -310,13 +353,13 @@ func (k *KubeAPI) DeleteDynamicResources(ctx context.Context, req model.DeleteRe
 	gvr := req.APIResource.GetGVR()
 	if req.APIResource.Namespaced {
 		for _, res := range req.Resources {
-			if err := k.getClient(req.Server).Dynamic.Resource(gvr).Namespace(res.Namespace).Delete(ctx, res.Name, metav1.DeleteOptions{}); err != nil {
+			if err := server.Dynamic.Resource(gvr).Namespace(res.Namespace).Delete(ctx, res.Name, metav1.DeleteOptions{}); err != nil {
 				return err
 			}
 		}
 	} else {
 		for _, res := range req.Resources {
-			if err := k.getClient(req.Server).Dynamic.Resource(gvr).Delete(ctx, res.Name, metav1.DeleteOptions{}); err != nil {
+			if err := server.Dynamic.Resource(gvr).Delete(ctx, res.Name, metav1.DeleteOptions{}); err != nil {
 				return err
 			}
 		}
@@ -325,21 +368,32 @@ func (k *KubeAPI) DeleteDynamicResources(ctx context.Context, req model.DeleteRe
 }
 
 func (k *KubeAPI) GetPodLogsReader(ctx context.Context, req model.PodLogRequest, podLogOptions *corev1.PodLogOptions) (io.ReadCloser, error) {
-	// TODO validate
-	logsReq := k.getClient(req.Server).Typed.CoreV1().Pods(req.Namespace).GetLogs(req.Name, podLogOptions)
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return nil, err
+	}
+
+	logsReq := server.Typed.CoreV1().Pods(req.Namespace).GetLogs(req.Name, podLogOptions)
 	podLogs, err := logsReq.Stream(ctx)
 	return podLogs, err
 }
 
 func (k *KubeAPI) NodeOperation(ctx context.Context, req model.NodeOperation) error {
 	// TODO validate
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return err
+	}
 	apiResourceList, err := k.getResource(req.Server, req.APIResource)
 	if err != nil {
 		return err
 	}
 
 	k.setResource(&req.APIResource, apiResourceList)
-	ri := k.getClient(req.Server).Dynamic.Resource(req.APIResource.GetGVR())
+	ri := server.Dynamic.Resource(req.APIResource.GetGVR())
 
 	payload := []struct {
 		Op    string `json:"op"`
@@ -360,13 +414,17 @@ func (k *KubeAPI) NodeOperation(ctx context.Context, req model.NodeOperation) er
 
 func (k *KubeAPI) NodeDrain(ctx context.Context, req model.NodeDrain, onDelete func(pod *corev1.Pod, usingEviction bool)) (*corev1.Node, error) {
 	// TODO validate
-	node, err := k.getClient(req.Server).Typed.CoreV1().Nodes().Get(ctx, req.ResourceName, metav1.GetOptions{})
+	server, err := k.getClient(req.Server)
+	if err != nil {
+		return nil, err
+	}
+	node, err := server.Typed.CoreV1().Nodes().Get(ctx, req.ResourceName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	drainer := &drain.Helper{
 		Ctx:                   ctx,
-		Client:                k.getClient(req.Server).Typed,
+		Client:                server.Typed,
 		Force:                 req.DrainForce,
 		IgnoreAllDaemonSets:   req.IgnoreAllDaemonSets,
 		DeleteEmptyDirData:    req.DeleteEmptyDirData,
@@ -381,10 +439,6 @@ func (k *KubeAPI) NodeDrain(ctx context.Context, req model.NodeDrain, onDelete f
 	return node, drain.RunNodeDrain(drainer, req.ResourceName)
 }
 
-func (k *KubeAPI) GetRestConfig(server string) *rest.Config {
-	return k.getClient(server).RestConfig
-}
-
 func (k *KubeAPI) setResource(req *model.APIResource, apiResourceList *metav1.APIResourceList) {
 	for _, r := range apiResourceList.APIResources {
 		if r.Kind == req.Kind && r.SingularName == strings.ToLower(req.Kind) {
@@ -394,9 +448,13 @@ func (k *KubeAPI) setResource(req *model.APIResource, apiResourceList *metav1.AP
 }
 
 func (k *KubeAPI) getResource(server string, req model.APIResource) (*metav1.APIResourceList, error) {
+	s, err := k.getClient(server)
+	if err != nil {
+		return nil, err
+	}
 	apiResourceList, found := k.cache.Get("apiResourceList")
 	if !found {
-		apiResourceList, err := k.getClient(server).Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
+		apiResourceList, err := s.Typed.ServerResourcesForGroupVersion(schema.GroupVersion{
 			Group:   req.Group,
 			Version: req.Version,
 		}.String())
@@ -409,25 +467,24 @@ func (k *KubeAPI) getResource(server string, req model.APIResource) (*metav1.API
 	return apiResourceList.(*metav1.APIResourceList), nil
 }
 
-func (k *KubeAPI) GetClientSet(server string) *config.Cluster {
-	for _, c := range k.clusters {
-		if c.Address == server {
-			return c
-		}
-	}
-	return nil
+// GetClient - just a wrapper
+func (k *KubeAPI) GetClient(server string) (*config.Cluster, error) {
+	return k.getClient(server)
 }
 
-func (k *KubeAPI) getClient(server string) *config.Cluster {
-	for _, c := range k.clusters {
-		if c.Address == server {
-			return c
-		}
+func (k *KubeAPI) getClient(server string) (*config.Cluster, error) {
+	s, found := k.clusters[server]
+	if found {
+		return s, nil
 	}
-	return nil
+	return nil, fmt.Errorf("server %s not found", server)
 }
 
 func (k *KubeAPI) GetResourceInterface(server, ns string, resource *model.APIResource) (dynamic.ResourceInterface, error) {
+	s, err := k.getClient(server)
+	if err != nil {
+		return nil, err
+	}
 	apiResourceList, err := k.getResource(server, *resource)
 	if err != nil {
 		return nil, err
@@ -437,9 +494,9 @@ func (k *KubeAPI) GetResourceInterface(server, ns string, resource *model.APIRes
 
 	var ri dynamic.ResourceInterface
 	if ns != "" {
-		ri = k.getClient(server).Dynamic.Resource(gvr).Namespace(ns)
+		ri = s.Dynamic.Resource(gvr).Namespace(ns)
 	} else {
-		ri = k.getClient(server).Dynamic.Resource(gvr)
+		ri = s.Dynamic.Resource(gvr)
 	}
 	return ri, nil
 }

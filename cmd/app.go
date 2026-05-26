@@ -185,6 +185,7 @@ func (a *App) initServer(staticFiles embed.FS) error {
 		c.JSON(http.StatusOK, gin.H{"message": a.Config.AuthDisabled})
 	})
 	router.POST("/api/login", r.Login)
+	router.POST("/api/cleanup", r.CleanUp)
 	auth := router.Group("/api")
 	auth.Use(mdlwr.Auth())
 	auth.GET("/lookup_configs", r.LookupConfigs)

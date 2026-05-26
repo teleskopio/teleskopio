@@ -13,12 +13,12 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-type MCPServer struct {
+type Server struct {
 	server *server.MCPServer
 	kapi   *kubeapi.KubeAPI
 }
 
-func New(kapi *kubeapi.KubeAPI) *MCPServer {
+func New(kapi *kubeapi.KubeAPI) *Server {
 	mcpServer := server.NewMCPServer(
 		"teleskopio-mcp",
 		"0.0.1",
@@ -32,20 +32,20 @@ func New(kapi *kubeapi.KubeAPI) *MCPServer {
 		server.WithRecovery(), // Enable error recovery
 	)
 
-	return &MCPServer{
+	return &Server{
 		kapi:   kapi,
 		server: mcpServer,
 	}
 }
 
-func (s *MCPServer) SetupRoutes(router *gin.Engine) *MCPServer {
+func (s *Server) SetupRoutes(router *gin.Engine) *Server {
 	for _, method := range []string{http.MethodPost, http.MethodOptions, http.MethodGet, http.MethodDelete} {
 		router.Handle(method, "/mcp", gin.WrapH(s.ServeHTTP()))
 	}
 	return s
 }
 
-func (s *MCPServer) ServeHTTP() *server.StreamableHTTPServer {
+func (s *Server) ServeHTTP() *server.StreamableHTTPServer {
 	return server.NewStreamableHTTPServer(s.server,
 		server.WithHeartbeatInterval(30*time.Second), // TODO custom
 		server.WithEndpointPath("/mcp"),
@@ -57,7 +57,7 @@ func (s *MCPServer) ServeHTTP() *server.StreamableHTTPServer {
 	)
 }
 
-func LoadTools(mcpServer *MCPServer) *MCPServer {
+func LoadTools(mcpServer *Server) *Server {
 	mcpServer.server.AddTool(
 		mcp.NewTool("clusters",
 			mcp.WithDescription("Get available kubernetes cluster endpoints"),
@@ -76,12 +76,12 @@ func LoadTools(mcpServer *MCPServer) *MCPServer {
 	return mcpServer
 }
 
-func (s *MCPServer) clusters(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) clusters(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	resp, err := mcp.NewToolResultJSON(map[string]any{"clusters": s.kapi.GetClusters()})
 	return resp, err
 }
 
-func (s *MCPServer) clusterVersion(ctx context.Context, request mcp.CallToolRequest, args model.PayloadRequest) (*mcp.CallToolResult, error) {
+func (s *Server) clusterVersion(ctx context.Context, request mcp.CallToolRequest, args model.PayloadRequest) (*mcp.CallToolResult, error) {
 	ver, err := s.kapi.GetVersion(args)
 	if err != nil {
 		return nil, err

@@ -94,6 +94,7 @@ func initLogger(cfg *config.Config) {
 	slog.Info("set loglevel", "level", level)
 }
 
+//nolint:funlen
 func (a *App) initServer(staticFiles embed.FS) error {
 	slog.Info("initialize web server", "addr", a.Config.ServerHTTP)
 	gin.SetMode(gin.ReleaseMode)

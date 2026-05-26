@@ -6,6 +6,8 @@ jwt_key: "super-salt" # salt for JWT token  `openssl rand -hex 20`
 auth_disabled: false # set to true to disable auth completly
 mcp:
   enabled: false
+  api_key: "somekey" # protect /mcp server with api_key
+  api_key_header: "X-MCP" # header key e.g. (X-MCP: somekey)
 users:
   - username: admin
     password: "" # htpasswd -nbB admin MySecret12345

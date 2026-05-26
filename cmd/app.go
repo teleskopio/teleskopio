@@ -111,12 +111,15 @@ func (a *App) initServer(staticFiles embed.FS) error {
 	if err != nil {
 		return err
 	}
-
 	if a.Config.MCP.Enabled {
-		// TODO fix secure
-		// fix base url
-		mcpBaseURL := "http://" + a.Config.ServerHTTP
-		slog.Info("mcp enabled", "base", mcpBaseURL)
+		slog.Info("mcp enabled", "api_key", len(a.Config.MCP.APIKey))
+		if a.Config.MCP.APIKey != "" {
+			if a.Config.MCP.APIKeyHeader == "" {
+				a.Config.MCP.APIKeyHeader = "X-MCP"
+				slog.Warn("mcp.api_key_header is empty set default", "default", a.Config.MCP.APIKeyHeader)
+			}
+			router.Use(mdlwr.MCPProtect())
+		}
 		mcp.LoadTools(
 			mcp.New(a.Config.Version, kapi).SetupRoutes(router),
 		)

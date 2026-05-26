@@ -46,6 +46,12 @@ type User struct {
 	Role     string `yaml:"role"`
 }
 
+type MCP struct {
+	Enabled      bool   `yaml:"enabled"`
+	APIKey       string `yaml:"api_key"`
+	APIKeyHeader string `yaml:"api_key_header"`
+}
+
 type Config struct {
 	LogColor     bool   `yaml:"log_color"`
 	LogJSON      bool   `yaml:"log_json"`
@@ -54,10 +60,8 @@ type Config struct {
 	AuthDisabled bool   `yaml:"auth_disabled"`
 	JWTKey       string `yaml:"jwt_key"`
 	Users        []User `yaml:"users"`
-	MCP          struct {
-		Enabled bool `yaml:"enabled"`
-	} `yaml:"mcp"`
-	Kube struct {
+	MCP          MCP    `yaml:"mcp"`
+	Kube         struct {
 		APIRequestTimeout string           `yaml:"api_request_timeout"`
 		Configs           []map[string]any `yaml:"configs"`
 	} `yaml:"kube"`

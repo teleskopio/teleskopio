@@ -51,6 +51,18 @@ func (m Middleware) CheckRole() gin.HandlerFunc {
 	}
 }
 
+func (m Middleware) MCPProtect() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenStr := c.GetHeader(m.cfg.MCP.APIKeyHeader)
+		if tokenStr == "" || tokenStr != m.cfg.MCP.APIKey {
+			c.Abort()
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid credentials"})
+			return
+		}
+		c.Next()
+	}
+}
+
 func (m Middleware) Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if m.cfg.AuthDisabled {

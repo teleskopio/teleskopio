@@ -151,6 +151,32 @@ func (k *KubeAPI) ListDynamicResource(ctx context.Context, req model.ListRequest
 	return list.Items, continueToken, resourceVersion, nil
 }
 
+func (k *KubeAPI) FilterPods(ctx context.Context, server string, opts metav1.ListOptions) (model.PodFilterResponse, error) {
+	result := model.PodFilterResponse{}
+
+	s, err := k.getClient(server)
+	if err != nil {
+		return result, err
+	}
+
+	pods, err := s.Typed.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
+	if err != nil {
+		return result, err
+	}
+
+	for _, pod := range pods.Items {
+		result.Items = append(
+			result.Items,
+			model.PodItem{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+				Phase:     string(pod.Status.Phase),
+				NodeName:  pod.Spec.NodeName,
+			})
+	}
+	return result, nil
+}
+
 func (k *KubeAPI) ListEventsDynamicResource(ctx context.Context, req model.ListRequest) ([]unstructured.Unstructured, string, string, error) {
 	if err := req.Validate(); err != nil {
 		return nil, "", "", err

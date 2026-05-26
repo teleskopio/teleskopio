@@ -157,6 +157,7 @@ func (r *Route) TriggerCronjob(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": jobName})
 }
 
+// TODO this cleanup routine might cleanup watcher related to other user?
 func (r *Route) CleanUp(c *gin.Context) {
 	var req model.PayloadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -174,9 +175,9 @@ func (r *Route) CleanUp(c *gin.Context) {
 		}
 		return true
 	})
-	r.helmWathers.Range(func(k string, v informers.SharedInformerFactory) bool {
-		slog.Debug("helm watcher", "k", k)
+	r.helmWathers.Range(func(k string, _ informers.SharedInformerFactory) bool {
 		// TODO
+		slog.Debug("helm watcher", "k", k)
 		return true
 	})
 	c.JSON(http.StatusOK, gin.H{"message": "cleanup"})

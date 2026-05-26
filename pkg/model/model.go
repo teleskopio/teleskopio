@@ -21,6 +21,29 @@ type PayloadRequest struct {
 	Server string `json:"server,required" jsonschema_description:"the kubernetes cluster endpoint"`
 }
 
+type PodFilter struct {
+	Server        string `json:"server,required" jsonschema_description:"the kubernetes cluster endpoint"`
+	FieldSelector string `json:"field_selector" jsonschema_description:"Chain field selectors by using a comma-separated list, chaining acts as a logical AND operator, meaning a resource is only selected if it matches every criteria in the chain. e.g. status.phase=Running,spec.nodeName=worker-1 or metadata.namespace!=default,status.phase!=Running"`
+	LabelSelector string `json:"label_selector" jsonschema_description:"Chain label selectors by using a comma-separated list, chaining acts as a logical AND operator, meaning a resource is only selected if it matches every criteria in the chain. e.g. app=frontend,environment=prod"`
+}
+
+func (p *PodFilter) Validate() error {
+	return validation.ValidateStruct(p,
+		validation.Field(&p.Server, validation.Required),
+	)
+}
+
+type PodItem struct {
+	Name      string `json:"name,required" jsonschema_description:"pod name"`
+	Phase     string `json:"phase,required" jsonschema_description:"pod phase e.g., Running, Pending, Succeeded, Failed, or Unknown"`
+	Namespace string `json:"namespace,required" jsonschema_description:"pod namespace"`
+	NodeName  string `json:"node_name,required" jsonschema_description:"the node name pod is deployed to"`
+}
+
+type PodFilterResponse struct {
+	Items []PodItem `json:"items,required" jsonschema_description:"the list of pods"`
+}
+
 type ClusterVersion struct {
 	Version string `json:"version" jsonschema_description:"the kubernetes cluster version"`
 }

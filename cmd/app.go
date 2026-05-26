@@ -118,7 +118,7 @@ func (a *App) initServer(staticFiles embed.FS) error {
 		mcpBaseURL := "http://" + a.Config.ServerHTTP
 		slog.Info("mcp enabled", "base", mcpBaseURL)
 		mcp.LoadTools(
-			mcp.New(kapi).SetupRoutes(router),
+			mcp.New(a.Config.Version, kapi).SetupRoutes(router),
 		)
 	}
 

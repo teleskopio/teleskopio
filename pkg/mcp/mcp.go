@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"teleskopio/pkg/kubeapi"
 	"teleskopio/pkg/model"
@@ -11,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Server struct {
@@ -18,15 +21,17 @@ type Server struct {
 	kapi   *kubeapi.KubeAPI
 }
 
-func New(kapi *kubeapi.KubeAPI) *Server {
+const requestTimeout = time.Second * 5
+
+func New(version string, kapi *kubeapi.KubeAPI) *Server {
 	mcpServer := server.NewMCPServer(
-		"teleskopio-mcp",
-		"0.0.1",
+		"teleskopio",
+		version,
 		server.WithToolCapabilities(true), // Enable tool capabilities
 		server.WithIcons(
 			mcp.Icon{
 				MIMEType: "image/png",
-				Src:      "https://github.com/teleskopio/teleskopio/blob/132d0feedc4b7134e6b0143f749529c315f61d50/assets/icon.png",
+				Src:      fmt.Sprintf("data:image/png;base64,%s", iconData),
 			}),
 		server.WithLogging(),  // Enable logging
 		server.WithRecovery(), // Enable error recovery
@@ -72,20 +77,48 @@ func LoadTools(mcpServer *Server) *Server {
 		),
 		mcp.NewStructuredToolHandler(mcpServer.clusterVersion),
 	) // cluster_version
+	mcpServer.server.AddTool(
+		mcp.NewTool("filter_pods",
+			mcp.WithDescription("Get pods by field selector or label selector"),
+			mcp.WithInputSchema[model.PodFilter](),
+			mcp.WithOutputSchema[model.PodFilterResponse](),
+		),
+		mcp.NewStructuredToolHandler(mcpServer.filterpods),
+	) // filter_pods
 
 	return mcpServer
 }
 
 func (s *Server) clusters(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	slog.Debug("new tool call", "tool", "clusters")
 	resp, err := mcp.NewToolResultJSON(map[string]any{"clusters": s.kapi.GetClusters()})
 	return resp, err
 }
 
-func (s *Server) clusterVersion(ctx context.Context, request mcp.CallToolRequest, args model.PayloadRequest) (*mcp.CallToolResult, error) {
+func (s *Server) clusterVersion(ctx context.Context, request mcp.CallToolRequest, args model.PayloadRequest) (model.ClusterVersion, error) {
+	slog.Debug("new tool call", "tool", "cluster_version", "args", args)
+	cv := model.ClusterVersion{}
 	ver, err := s.kapi.GetVersion(args)
 	if err != nil {
-		return nil, err
+		return cv, err
 	}
-	fallbackText := fmt.Sprintf("The cluster version is: %s", ver.GitVersion)
-	return mcp.NewToolResultStructured(model.ClusterVersion{Version: ver.GitVersion}, fallbackText), nil
+	cv.Version = ver.GitVersion
+	return cv, nil
+}
+
+func (s *Server) filterpods(ctx context.Context, request mcp.CallToolRequest, args model.PodFilter) (model.PodFilterResponse, error) {
+	slog.Debug("new tool call", "tool", "filter_pods", "args", args)
+	gpr := model.PodFilterResponse{}
+	if err := args.Validate(); err != nil {
+		return gpr, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+	opts := metav1.ListOptions{
+		FieldSelector: args.FieldSelector,
+		LabelSelector: args.LabelSelector,
+	}
+	pods, err := s.kapi.FilterPods(ctx, args.Server, opts)
+	return pods, err
 }

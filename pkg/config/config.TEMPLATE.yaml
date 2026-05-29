@@ -2,12 +2,18 @@ log_color: false # Color output (only work with text)
 log_json: true # Output logs as JSON
 log_level: INFO # Log Level
 server_http: ":3080" # HTTP address
+protocol: http # the web server protocol http,https
 jwt_key: "super-salt" # salt for JWT token  `openssl rand -hex 20`
 auth_disabled: false # set to true to disable auth completly
 mcp:
   enabled: false
   api_key: "somekey" # protect /mcp server with api_key
   api_key_header: "X-MCP" # header key e.g. (X-MCP: somekey)
+  cors: # cors settings for /mcp endpoint, in case if the client in another web app
+    origin: http://localhost:5802
+    headers: # additional headers
+      - mcp-session-id
+      - mcp-protocol-version
 users:
   - username: admin
     password: "" # htpasswd -nbB admin MySecret12345

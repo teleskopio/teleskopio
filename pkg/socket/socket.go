@@ -8,15 +8,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(_ *http.Request) bool {
-		// TODO add check origin
-		return true
-	},
-}
-
 type Hub struct {
 	clients    map[*Client]bool
 	broadcast  chan []byte
@@ -63,6 +54,10 @@ func (h *Hub) Run() {
 }
 
 func SetupWebsocket(hub *Hub, router *gin.Engine) {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 	router.GET("/ws", func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {

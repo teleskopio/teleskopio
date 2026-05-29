@@ -3,11 +3,13 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"teleskopio/pkg/config"
 	"teleskopio/pkg/model"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -69,7 +71,7 @@ func (m Middleware) Auth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		tokenStr := c.GetHeader("Authorization")
+		tokenStr := c.GetHeader("Token")
 		if tokenStr == "" {
 			c.Abort()
 			c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid credentials"})
@@ -89,18 +91,20 @@ func (m Middleware) Auth() gin.HandlerFunc {
 	}
 }
 
-func (m Middleware) CORSMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
+func (m Middleware) CORS() gin.HandlerFunc {
+	allowedHeaders := []string{"Token", "Content-Type", "Content-Length", "Accept-Encoding", "Accept", "Origin", "Cache-Control"}
+	origins := []string{(&url.URL{Scheme: m.cfg.Protocol, Host: m.cfg.ServerHTTP}).String()}
+	if m.cfg.MCP.Enabled {
+		allowedHeaders = append(allowedHeaders, m.cfg.MCP.Cors.Headers...)
+		origins = append(origins, m.cfg.MCP.Cors.Origin)
 	}
+	slog.Debug("cors", "origins", origins, "headers", allowedHeaders)
+	return cors.New(cors.Config{
+		AllowOrigins:     origins,
+		AllowMethods:     []string{"DELETE", "GET", "POST", "PUT", "PATCH", "OPTIONS"},
+		AllowHeaders:     allowedHeaders,
+		AllowWebSockets:  true,
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	})
 }

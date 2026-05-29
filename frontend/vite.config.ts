@@ -19,7 +19,10 @@ export default defineConfig(async () => ({
   server: {
     port: 3000,
     proxy: {
-      '/api': 'http://localhost:3080',
+      '/api': {
+        target: 'http://localhost:3080',
+        changeOrigin: false,
+      },
       '/ws': {
         target: 'ws://localhost:3080',
         ws: true, // This is essential for WebSocket proxying
@@ -27,12 +30,4 @@ export default defineConfig(async () => ({
       },
     },
   },
-  // build: {
-  //   rollupOptions: {
-  //     input: {
-  //       main: resolve(__dirname, 'index.html'),
-  //       notfound: resolve(__dirname, 'public/404.html'),
-  //     },
-  //   },
-  // },
 }));

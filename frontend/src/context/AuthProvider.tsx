@@ -45,33 +45,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (username: string, password: string): Promise<any> => {
-    try {
-      const res: any = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
+    const res: any = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
 
-      if (!res.ok) {
-        return await res.json();
-      }
-
-      const data = await res.json();
-      const { token } = data;
-
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const user: User = { username: payload.username, role: payload.role };
-
-      setToken(token);
-      setUser(user);
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-
-      return { success: '' };
-    } catch (e: any) {
-      console.error(e);
-      return e;
+    if (!res.ok) {
+      return await res.json();
     }
+
+    const data = await res.json();
+    const { token } = data;
+
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const user: User = { username: payload.username, role: payload.role };
+
+    setToken(token);
+    setUser(user);
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+
+    return { success: '' };
   };
 
   const logout = () => {

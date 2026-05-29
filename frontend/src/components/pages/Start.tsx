@@ -25,7 +25,12 @@ export function StartPage() {
       await call<any[]>('ping');
       await getConfigs(searchQuery);
     } catch (error: any) {
-      toast.error('Error! Cant ping server\n' + error.message);
+      if (error instanceof Error) {
+        logout();
+        toast.error('Unauthorized request');
+      } else {
+        toast.error('Unknown error');
+      }
     }
   }, [searchQuery]);
 

@@ -58,6 +58,7 @@ import {
 import { cn } from '@/util';
 import { useCrdResourcesState } from '@/store/crdResources';
 import { useConfig } from '@/context/ConfigContext';
+import { getLocalKeyObject } from '@/lib/localStorage';
 // import { compareVersions } from 'compare-versions';
 
 export const items = [
@@ -178,7 +179,8 @@ export function AppSidebar() {
   const crds = useCrdResourcesState();
   const [sidebarItems, setSidebarItems] = useState<any>([]);
   const loading = useloadingState();
-  const { serverInfo, isLoading } = useConfig();
+  const { isLoading } = useConfig();
+  const config = getLocalKeyObject('currentCluster');
 
   useEffect(() => {
     let newSidebar = items;
@@ -214,14 +216,14 @@ export function AppSidebar() {
           ...submenu,
         ];
       }
-      if (serverInfo?.server === '') {
+      if (!config?.hasOwnProperty('server')) {
         if (x.title === 'Main' || x.title === 'Settings') {
           x.enabled = true;
         } else if (x.title !== 'Main' || x.title !== 'Settings') {
           x.enabled = false;
         }
         return x;
-      } else if (serverInfo?.server !== '') {
+      } else if (config?.hasOwnProperty('server')) {
         if (x.title === 'Main') {
           x.enabled = false;
         } else if (x.title !== 'Main') {

@@ -101,8 +101,8 @@ func (a *App) initServer(staticFiles embed.FS) error {
 	router := gin.New()
 	mdlwr := middleware.New(a.Config)
 	router.Use(mdlwr.Logger())
-	router.Use(mdlwr.CORSMiddleware())
 	router.Use(gin.Recovery())
+	router.Use(mdlwr.CORS())
 	hub := webSocket.NewHub()
 	go hub.Run()
 
@@ -122,7 +122,7 @@ func (a *App) initServer(staticFiles embed.FS) error {
 		}
 		mcp.LoadPrompts(
 			mcp.LoadTools(
-				mcp.New(a.Config.Version, kapi).SetupRoutes(router),
+				mcp.New(*a.Config, kapi).SetupRoutes(router),
 			),
 		)
 	}

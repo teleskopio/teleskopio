@@ -3,8 +3,10 @@ package mcp
 import (
 	"fmt"
 	"net/http"
-	"teleskopio/pkg/kubeapi"
 	"time"
+
+	"teleskopio/pkg/config"
+	"teleskopio/pkg/kubeapi"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -14,14 +16,15 @@ import (
 type Server struct {
 	server *server.MCPServer
 	kapi   *kubeapi.KubeAPI
+	cfg    config.Config
 }
 
 const requestTimeout = time.Second * 5
 
-func New(version string, kapi *kubeapi.KubeAPI) *Server {
+func New(cfg config.Config, kapi *kubeapi.KubeAPI) *Server {
 	mcpServer := server.NewMCPServer(
 		"teleskopio",
-		version,
+		cfg.Version,
 		server.WithToolCapabilities(true), // Enable tool capabilities
 		server.WithIcons(
 			mcp.Icon{
@@ -35,6 +38,7 @@ func New(version string, kapi *kubeapi.KubeAPI) *Server {
 	)
 
 	return &Server{
+		cfg:    cfg,
 		kapi:   kapi,
 		server: mcpServer,
 	}
@@ -52,9 +56,8 @@ func (s *Server) ServeHTTP() *server.StreamableHTTPServer {
 		server.WithHeartbeatInterval(30*time.Second), // TODO custom
 		server.WithEndpointPath("/mcp"),
 		server.WithStreamableHTTPCORS(
-			server.WithCORSAllowedOrigins("*"),
+			server.WithCORSAllowedOrigins(s.cfg.MCP.Cors.Origin),
 			server.WithCORSAllowCredentials(),
-			server.WithCORSMaxAge(300),
 		),
 	)
 }

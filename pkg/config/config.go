@@ -50,6 +50,10 @@ type MCP struct {
 	Enabled      bool   `yaml:"enabled"`
 	APIKey       string `yaml:"api_key"`
 	APIKeyHeader string `yaml:"api_key_header"`
+	Cors         struct {
+		Origin  string   `yaml:"origin"`
+		Headers []string `yaml:"headers"`
+	} `yaml:"cors"`
 }
 
 type Config struct {
@@ -57,6 +61,7 @@ type Config struct {
 	LogJSON      bool   `yaml:"log_json"`
 	LogLevel     string `yaml:"log_level"`
 	ServerHTTP   string `yaml:"server_http"`
+	Protocol     string `yaml:"protocol"`
 	AuthDisabled bool   `yaml:"auth_disabled"`
 	JWTKey       string `yaml:"jwt_key"`
 	Users        []User `yaml:"users"`
@@ -203,6 +208,9 @@ func Parse(configPath string) (Config, []*Cluster, Users, error) {
 
 	for _, u := range cfg.Users {
 		users.Users[u.Username] = u
+	}
+	if cfg.Protocol == "" {
+		cfg.Protocol = "http"
 	}
 	return cfg, clusters, users, nil
 }

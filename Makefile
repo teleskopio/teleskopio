@@ -10,7 +10,7 @@ RESET  := $(shell tput -Txterm sgr0)
 
 PROJECT_NAME := teleskopio
 LINTER_BIN ?= golangci-lint
-LINTER_VERSION ?= v2.4.0
+LINTER_VERSION ?= v2.12.2
 
 .PHONY: all test build clean run lint /bin/$(LINTER_BIN)
 

@@ -45,7 +45,7 @@ func (s *Server) clusters(ctx context.Context, request mcp.CallToolRequest) (*mc
 	return resp, err
 }
 
-func (s *Server) apiResources(ctx context.Context, request mcp.CallToolRequest, args model.APIResourceRequest) (model.APIResourceResponse, error) {
+func (s *Server) apiResources(_ context.Context, request mcp.CallToolRequest, args model.APIResourceRequest) (model.APIResourceResponse, error) {
 	slog.Debug("new tool call", "tool", "api_resources", "args", args)
 	ar := model.APIResourceResponse{}
 	if err := args.Validate(); err != nil {
@@ -64,7 +64,7 @@ func (s *Server) apiResources(ctx context.Context, request mcp.CallToolRequest, 
 	return ar, err
 }
 
-func (s *Server) listResources(ctx context.Context, request mcp.CallToolRequest, args model.ResourceFilter) (model.ResourceFilterResponse, error) {
+func (s *Server) listResources(ctx context.Context, _ mcp.CallToolRequest, args model.ResourceFilter) (model.ResourceFilterResponse, error) {
 	slog.Debug("new tool call", "tool", "get_resources", "args", args)
 	resources := model.ResourceFilterResponse{}
 	if err := args.Validate(); err != nil {
@@ -88,13 +88,13 @@ func (s *Server) listResources(ctx context.Context, request mcp.CallToolRequest,
 		ri = kapi.Dynamic.Resource(gvr)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	ctxtimeout, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 	opts := metav1.ListOptions{
 		FieldSelector: args.FieldSelector,
 		LabelSelector: args.LabelSelector,
 	}
-	items, err := ri.List(ctx, opts)
+	items, err := ri.List(ctxtimeout, opts)
 	if err != nil {
 		return resources, err
 	}

@@ -29,7 +29,7 @@ func LoadPrompts(mcpServer *Server) *Server {
 	return mcpServer
 }
 
-func (s Server) podsDiagnosis(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+func (s Server) podsDiagnosis(_ context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 	slog.Debug("new prompt call", "prompt", "pods_diagnosis", "req", request.Params.Arguments)
 	server := request.Params.Arguments["server"]
 	if server == "" {
@@ -62,15 +62,14 @@ Return short report for the user.
 }
 
 type ServerEndpointCompletionProvider struct {
-	prompts map[string][]string // prompt name -> known argument values
-	kapi    *kubeapi.KubeAPI
+	kapi *kubeapi.KubeAPI
 }
 
 func (p *ServerEndpointCompletionProvider) CompletePromptArgument(
-	ctx context.Context,
+	_ context.Context,
 	promptName string,
 	argument mcp.CompleteArgument,
-	compCtx mcp.CompleteContext,
+	_ mcp.CompleteContext,
 ) (*mcp.Completion, error) {
 	switch promptName {
 	case "pods_diagnosis":

@@ -33,7 +33,7 @@ build-docker: ## Build an image
 
 
 bin/$(LINTER_BIN):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./bin $(LINTER_VERSION)
+	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b ./bin $(LINTER_VERSION)
 
 ## Clean:
 clean: ## Remove build related file

@@ -9,8 +9,6 @@
 	</div>
 </p>
 
-## Preview
-
 <div aligh="center">
 	<img src="assets/preview-light.png" alt="teleskopio lightweight kubernetes web client" width="100%" />
 	<img src="assets/preview-dark.png" alt="teleskopio lightweight kubernetes web client" width="100%" />

@@ -64,7 +64,7 @@ export function LoginForm({ login, className, ...props }: LoginFormProps) {
                   href="https://github.com/teleskopio/teleskopio"
                   className={'text-xs'}
                 >
-                  <span>teleskopio v0.1.4</span>
+                  <span>teleskopio v0.1.5</span>
                 </a>
               </div>
             </div>

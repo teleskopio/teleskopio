@@ -7,9 +7,9 @@
   <a href="https://teleskopio.github.io">teleskopio</a>
 </p>
 
-#### about
-
-teleskopio is a lightweight kubernetes web client.
+<div aligh="center">
+	teleskopio is a lightweight kubernetes web client.
+</div>
 
 #### preview
 

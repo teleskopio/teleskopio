@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://www.zot.sh">
+  <a href="https://teleskopio.github.io">
     <img src="assets/icon.png" alt="teleskopio lightweight kubernetes web client" width="120" height="120" />
   </a>
 </div>
@@ -10,6 +10,16 @@
 #### about
 
 teleskopio is a lightweight kubernetes web client.
+
+#### preview
+
+<p>
+	<img src="assets/preview-light.png" alt="teleskopio lightweight kubernetes web client" width="40%" />
+</p>
+<p>
+	<img src="assets/preview-dark.png" alt="teleskopio lightweight kubernetes web client" width="40%" />
+</p>
+
 
 #### features
 

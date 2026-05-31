@@ -14,10 +14,8 @@ teleskopio is a lightweight kubernetes web client.
 #### preview
 
 <div aligh="center">
-	<img src="assets/preview-light.png" alt="teleskopio lightweight kubernetes web client" width="49%" />
-</div>
-<div>
-	<img src="assets/preview-dark.png" alt="teleskopio lightweight kubernetes web client" width="49%" />
+	<img src="assets/preview-light.png" alt="teleskopio lightweight kubernetes web client" width="90%" />
+	<img src="assets/preview-dark.png" alt="teleskopio lightweight kubernetes web client" width="90%" />
 </div>
 
 

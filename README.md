@@ -1,21 +1,17 @@
-<h2 align="center">
-    <code>teleskopio</code> is an open-source small and beautiful Kubernetes web client.
-</h2>
+<div align="center">
+  <a href="https://www.zot.sh">
+    <img src="assets/icon.png" alt="teleskopio lightweight kubernetes web client" width="120" height="120" />
+  </a>
+</div>
 <p align="center">
-    <img width="90" src="https://github.com/teleskopio/teleskopio/actions/workflows/ci.yaml/badge.svg"/>
+  <a href="https://teleskopio.github.io">teleskopio</a>
 </p>
 
-### Preview
+#### about
 
-<p align="center">
-    <img width="100%" src="./assets/preview.png"/>
-</p>
+teleskopio is a lightweight kubernetes web client.
 
-<p align="center">
-    <img width="100%" src="./assets/preview_light.png"/>
-</p>
-
-### Features
+#### features
 
 - [Multiple config support](https://teleskopio.github.io/configuration/#configuration) – switch between clusters effortlessly. Teleskopio reads the `$KUBECONFIG` variable and checks the `config.yaml` file.
 - Simple `JWT` token authorization.
@@ -39,10 +35,15 @@
 - Air-gapped environments ready. No external requests.
 - [MCP server](https://teleskopio.github.io/blog/mcp-server)
 
-### Configuration
+### install
+
+There are few ways to install teleskopio.
+
+- [Linux](https://teleskopio.github.io/install/#linux-2)
+- [Mac OS](https://teleskopio.github.io/install/#macos-2)
+- [Docker](https://teleskopio.github.io/install/#docker-2)
+- [Helm](https://teleskopio.github.io/install/#helm-2)
+
+### configuration
 
 [teleskopio.github.io/configuration](https://teleskopio.github.io/configuration/#configuration)
-
-### Full Readme
-
-[teleskopio.github.io](https://teleskopio.github.io)
